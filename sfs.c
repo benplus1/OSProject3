@@ -1,9 +1,9 @@
 /*
-  Simple File System
+   Simple File System
 
-  This code is derived from function prototypes found /usr/include/fuse/fuse.h
-  Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
-  His code is licensed under the LGPLv2.
+   This code is derived from function prototypes found /usr/include/fuse/fuse.h
+   Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
+   His code is licensed under the LGPLv2.
 
 */
 
@@ -28,6 +28,66 @@
 #endif
 
 #include "log.h"
+#include "sfs.h"
+const int BM_BLOCK=0;
+const int HEAD_BLOCK=1;
+int bitmap[512];
+
+char headBuf[512];
+inode * head;
+
+void copyInode(inode * dest, inode * target){
+	dest->firstChild=target->firstChild;
+	dest->sibling=target->sibling;
+	dest->userId=target->userId;
+	dest->groupId=target->groupId;
+	dest->offset=target->offset; 
+	dest->blockSize=target->blockSize;
+	dest->blockCount=target->blockCount;
+	dest->lastAccess=target->lastAccess;
+	dest->lastMod=target->lastMod;
+	dest->lastStatus=target->lastStatus;
+	dest->type=target->type;
+}
+
+
+int getInode(char * path, inode * buf){
+
+	char buff[512];
+	inode * ptr=head;
+	char * token=strtok(path,"/");
+	int found=1;
+	while(ptr!=NULL&&token){
+		printf("token %s\n", token);
+
+		int ptrNum=ptr->firstChild;
+		inode * childPtr;
+
+		found=0;
+		while(ptrNum>0){
+			block_read(ptrNum,buff);
+			childPtr=(inode *) buff;
+			if(strcmp(childPtr->path,token)){
+				found=1;
+				break;
+			}
+			ptrNum=childPtr->sibling;
+		}
+		if(!found){
+			log_msg("Failed traversing\n");	
+			break;
+		}
+		ptr=childPtr;
+		strtok(NULL,"/");
+	} 
+
+	if(found){
+		copyInode(buf,ptr);
+		return 0;
+	}else{
+		return -ENOENT;
+	}		
+} 
 
 
 ///////////////////////////////////////////////////////////
@@ -48,13 +108,27 @@
  */
 void *sfs_init(struct fuse_conn_info *conn)
 {
-    fprintf(stderr, "in bb-init\n");
-    log_msg("\nsfs_init()\n");
-    
-    log_conn(conn);
-    log_fuse_context(fuse_get_context());
+	fprintf(stderr, "in bb-init\n");
+	log_msg("Process ID: %d\n",getpid());
+	log_msg("\nsfs_init()\n");
 
-    return SFS_DATA;
+	block_read(BM_BLOCK,bitmap);   
+	block_read(HEAD_BLOCK,headBuf);
+	head=(inode *)headBuf;
+	log_msg("Grabbed initial blocks\n");	
+	//Update head (super block)
+	head->userId=getuid();
+	head->groupId=getgid();
+	head->lastAccess=time(NULL);
+	head->lastMod=time(NULL);
+	head->lastStatus=time(NULL);
+	head->type=S_IFDIR;
+
+	log_conn(conn);
+	log_fuse_context(fuse_get_context());
+
+	log_msg("Done initing\n"); 
+	return SFS_DATA;
 }
 
 /**
@@ -66,7 +140,9 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
-    log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
+	log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
+	block_write(HEAD_BLOCK,head);
+	block_write(BM_BLOCK,head);
 }
 
 /** Get file attributes.
@@ -77,13 +153,34 @@ void sfs_destroy(void *userdata)
  */
 int sfs_getattr(const char *path, struct stat *statbuf)
 {
-    int retstat = 0;
-    char fpath[PATH_MAX];
-    
-    log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
-	  path, statbuf);
-    
-    return retstat;
+	log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
+			path, statbuf);
+	int retstat = 0;
+	char fpath[PATH_MAX];
+	//retstat=lstat(path,statbuf);
+	if(retstat<0){
+		retstat=-errno;
+	}
+
+	struct inode tar;
+	int res=getInode(path,&tar);
+	struct inode * target=&tar;
+	if(res==0){
+		//fill stat buff
+		statbuf->st_uid=target->userId;
+		statbuf->st_gid=target->groupId;
+		statbuf->st_size=target->offset; 
+		statbuf->st_blksize=target->blockSize;
+		statbuf->st_blocks=target->blockCount;
+		statbuf->st_atime=target->lastAccess;
+		statbuf->st_mtime=target->lastMod;
+		statbuf->st_ctime=target->lastStatus;
+		statbuf->st_mode=target->type;
+	}else{
+		retstat=-ENOENT;
+	} 
+	log_msg("Stat result: %d\n",retstat);
+	return retstat;
 }
 
 /**
@@ -100,22 +197,22 @@ int sfs_getattr(const char *path, struct stat *statbuf)
  */
 int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
-	    path, mode, fi);
-    
-    
-    return retstat;
+	int retstat = 0;
+	log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
+			path, mode, fi);
+
+
+	return retstat;
 }
 
 /** Remove a file */
 int sfs_unlink(const char *path)
 {
-    int retstat = 0;
-    log_msg("sfs_unlink(path=\"%s\")\n", path);
+	int retstat = 0;
+	log_msg("sfs_unlink(path=\"%s\")\n", path);
 
-    
-    return retstat;
+
+	return retstat;
 }
 
 /** File open operation
@@ -130,12 +227,12 @@ int sfs_unlink(const char *path)
  */
 int sfs_open(const char *path, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
-	    path, fi);
+	int retstat = 0;
+	log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
+			path, fi);
 
-    
-    return retstat;
+
+	return retstat;
 }
 
 /** Release an open file
@@ -154,12 +251,12 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
  */
 int sfs_release(const char *path, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
-	  path, fi);
-    
+	int retstat = 0;
+	log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
+			path, fi);
 
-    return retstat;
+
+	return retstat;
 }
 
 /** Read data from an open file
@@ -175,12 +272,12 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
  */
 int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-	    path, buf, size, offset, fi);
+	int retstat = 0;
+	log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
+			path, buf, size, offset, fi);
 
-   
-    return retstat;
+
+	return retstat;
 }
 
 /** Write data to an open file
@@ -192,38 +289,38 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
  * Changed in version 2.2
  */
 int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
-	     struct fuse_file_info *fi)
+		struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-	    path, buf, size, offset, fi);
-    
-    
-    return retstat;
+	int retstat = 0;
+	log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
+			path, buf, size, offset, fi);
+
+
+	return retstat;
 }
 
 
 /** Create a directory */
 int sfs_mkdir(const char *path, mode_t mode)
 {
-    int retstat = 0;
-    log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
-	    path, mode);
-   
-    
-    return retstat;
+	int retstat = 0;
+	log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
+			path, mode);
+
+
+	return retstat;
 }
 
 
 /** Remove a directory */
 int sfs_rmdir(const char *path)
 {
-    int retstat = 0;
-    log_msg("sfs_rmdir(path=\"%s\")\n",
-	    path);
-    
-    
-    return retstat;
+	int retstat = 0;
+	log_msg("sfs_rmdir(path=\"%s\")\n",
+			path);
+
+
+	return retstat;
 }
 
 
@@ -236,12 +333,12 @@ int sfs_rmdir(const char *path)
  */
 int sfs_opendir(const char *path, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
-	  path, fi);
-    
-    
-    return retstat;
+	int retstat = 0;
+	log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
+			path, fi);
+
+
+	return retstat;
 }
 
 /** Read directory
@@ -266,12 +363,30 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
  * Introduced in version 2.3
  */
 int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
-	       struct fuse_file_info *fi)
+		struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    
-    
-    return retstat;
+	int retstat = 0;
+	log_msg("sfs_readdir\n");
+	filler(buf, ".",NULL,0);
+	filler(buf,"..",NULL,0);
+	filler(buf,"DEEZ NUTS",NULL,0);	
+	inode tar;
+	int res=getInode(path,&tar);
+	if(res==0){
+		char buff[512];
+		int  inodeNum=tar.firstChild;
+		while(inodeNum>0){
+			block_read(inodeNum,buff);
+			inode * curr=(inode *)buff;
+			filler(buf,curr->path,NULL,0);
+			inodeNum=curr->sibling;
+		}	
+	
+	}else{
+		retstat=res;
+	}
+
+	return retstat;
 }
 
 /** Release directory
@@ -280,65 +395,65 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
  */
 int sfs_releasedir(const char *path, struct fuse_file_info *fi)
 {
-    int retstat = 0;
+	int retstat = 0;
 
-    
-    return retstat;
+
+	return retstat;
 }
 
 struct fuse_operations sfs_oper = {
-  .init = sfs_init,
-  .destroy = sfs_destroy,
+	.init = sfs_init,
+	.destroy = sfs_destroy,
 
-  .getattr = sfs_getattr,
-  .create = sfs_create,
-  .unlink = sfs_unlink,
-  .open = sfs_open,
-  .release = sfs_release,
-  .read = sfs_read,
-  .write = sfs_write,
+	.getattr = sfs_getattr,
+	.create = sfs_create,
+	.unlink = sfs_unlink,
+	.open = sfs_open,
+	.release = sfs_release,
+	.read = sfs_read,
+	.write = sfs_write,
 
-  .rmdir = sfs_rmdir,
-  .mkdir = sfs_mkdir,
+	.rmdir = sfs_rmdir,
+	.mkdir = sfs_mkdir,
 
-  .opendir = sfs_opendir,
-  .readdir = sfs_readdir,
-  .releasedir = sfs_releasedir
+	.opendir = sfs_opendir,
+	.readdir = sfs_readdir,
+	.releasedir = sfs_releasedir
 };
 
 void sfs_usage()
 {
-    fprintf(stderr, "usage:  sfs [FUSE and mount options] diskFile mountPoint\n");
-    abort();
+	fprintf(stderr, "usage:  sfs [FUSE and mount options] diskFile mountPoint\n");
+	abort();
 }
 
 int main(int argc, char *argv[])
 {
-    int fuse_stat;
-    struct sfs_state *sfs_data;
-    
-    // sanity checking on the command line
-    if ((argc < 3) || (argv[argc-2][0] == '-') || (argv[argc-1][0] == '-'))
-	sfs_usage();
+	int fuse_stat;
+	struct sfs_state *sfs_data;
 
-    sfs_data = malloc(sizeof(struct sfs_state));
-    if (sfs_data == NULL) {
-	perror("main calloc");
-	abort();
-    }
+	// sanity checking on the command line
+	if ((argc < 3) || (argv[argc-2][0] == '-') || (argv[argc-1][0] == '-'))
+		sfs_usage();
 
-    // Pull the diskfile and save it in internal data
-    sfs_data->diskfile = argv[argc-2];
-    argv[argc-2] = argv[argc-1];
-    argv[argc-1] = NULL;
-    argc--;
-    
-    sfs_data->logfile = log_open();
-    
-    // turn over control to fuse
-    fprintf(stderr, "about to call fuse_main, %s \n", sfs_data->diskfile);
-    fuse_stat = fuse_main(argc, argv, &sfs_oper, sfs_data);
-    fprintf(stderr, "fuse_main returned %d\n", fuse_stat);
-    
-    return fuse_stat;
+	sfs_data = malloc(sizeof(struct sfs_state));
+	if (sfs_data == NULL) {
+		perror("main calloc");
+		abort();
+	}
+
+	// Pull the diskfile and save it in internal data
+	sfs_data->diskfile = argv[argc-2];
+	argv[argc-2] = argv[argc-1];
+	argv[argc-1] = NULL;
+	argc--;
+
+	sfs_data->logfile = log_open();
+
+	// turn over control to fuse
+	fprintf(stderr, "about to call fuse_main, %s \n", sfs_data->diskfile);
+	fuse_stat = fuse_main(argc, argv, &sfs_oper, sfs_data);
+	fprintf(stderr, "fuse_main returned %d\n", fuse_stat);
+
+	return fuse_stat;
 }
