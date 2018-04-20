@@ -122,6 +122,14 @@ int getInode(char * path, inode * buf){
 	}else{
 		return -ENOENT;
 	}		
+}
+
+
+inode testInode(int blockNum){
+	char buf[512];
+	block_read(blockNum,buf);
+	inode * curr=buf;
+	return *curr;	
 } 
 
 
@@ -173,6 +181,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 		superBlock->headNum=HEAD_BLOCK;
 		block_write(SUPER_BLOCK,(char *) superBlock);	
 		block_write(superBlock->headNum,(char *)head);
+		block_write(BM_BLOCK,bitmap);
 		char bu[512];
 		block_read(superBlock->headNum,bu);
 
@@ -182,6 +191,9 @@ void *sfs_init(struct fuse_conn_info *conn)
 	}else{
 		block_read(superBlock->headNum,headBuf); //Can safely grab head block	
 		head=(inode *) headBuf;
+		
+		block_read(BM_BLOCK,bitmap);
+		
 	}		
 	
 	log_conn(conn);
@@ -201,8 +213,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 void sfs_destroy(void *userdata)
 {
 	log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
-	block_write(HEAD_BLOCK,head);
-	block_write(BM_BLOCK,head);
+	block_write(BM_BLOCK,bitmap);
 	disk_close(FILE_PATH);
 }
 
@@ -310,6 +321,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 					block_write(ptr->id,ptr);
 				}
 				block_write(newBlock,&newFile);	
+				bitmap[newBlock]=1;
 			}else{
 				retstat=-ENOMEM;
 			}	
