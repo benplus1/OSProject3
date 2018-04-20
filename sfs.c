@@ -29,14 +29,18 @@
 
 #include "log.h"
 #include "sfs.h"
-const int BM_BLOCK=0;
-const int HEAD_BLOCK=1;
-int bitmap[512];
+const int SUPER_BLOCK=0;
+const int BM_BLOCK=1;
+const int MAGIC_NUMBER=1234;
+const int HEAD_BLOCK=2;
 
+char * FILE_PATH="/.freespace/hkc33/testfsfile";
+int bitmap[128];
 char headBuf[512];
 inode * head;
 
 void copyInode(inode * dest, inode * target){
+	strcpy(dest->path,target->path);
 	dest->firstChild=target->firstChild;
 	dest->sibling=target->sibling;
 	dest->userId=target->userId;
@@ -48,13 +52,44 @@ void copyInode(inode * dest, inode * target){
 	dest->lastMod=target->lastMod;
 	dest->lastStatus=target->lastStatus;
 	dest->type=target->type;
+	dest->id=target->id;
+}
+
+inode createInode(char * path, mode_t type, off_t offset, ino_t id){
+	inode newInode;
+	strcpy(newInode.path,path);
+	int pathEnd=strlen(path);	
+	newInode.path[pathEnd]='\0';
+	newInode.type=type;
+	newInode.firstChild=-1;
+	newInode.sibling=-1;
+	newInode.userId=getuid();
+	newInode.groupId=getgid();
+	newInode.blockSize=512;
+	newInode.lastAccess=time(NULL);
+	newInode.lastMod=time(NULL);
+	newInode.lastStatus=time(NULL);
+	newInode.blockCount=0;
+	newInode.offset=offset;
+	newInode.id=id;
+	return newInode;
+}
+int findFreeBlock(){
+	int i;
+	for(i=0;i<128;i++){
+		if(bitmap[i]==0){
+			return i;
+		}
+	}
+	return -1;
 }
 
 
 int getInode(char * path, inode * buf){
 
 	char buff[512];
-	inode * ptr=head;
+	block_read(HEAD_BLOCK,buff);
+	inode * ptr=buff;
 	char * token=strtok(path,"/");
 	int found=1;
 	while(ptr!=NULL&&token){
@@ -67,7 +102,7 @@ int getInode(char * path, inode * buf){
 		while(ptrNum>0){
 			block_read(ptrNum,buff);
 			childPtr=(inode *) buff;
-			if(strcmp(childPtr->path,token)){
+			if(strcmp(childPtr->path,token)==0){
 				found=1;
 				break;
 			}
@@ -78,7 +113,7 @@ int getInode(char * path, inode * buf){
 			break;
 		}
 		ptr=childPtr;
-		strtok(NULL,"/");
+		token=strtok(NULL,"/");
 	} 
 
 	if(found){
@@ -111,19 +146,44 @@ void *sfs_init(struct fuse_conn_info *conn)
 	fprintf(stderr, "in bb-init\n");
 	log_msg("Process ID: %d\n",getpid());
 	log_msg("\nsfs_init()\n");
-
+	disk_open(FILE_PATH);
 	block_read(BM_BLOCK,bitmap);   
-	block_read(HEAD_BLOCK,headBuf);
-	head=(inode *)headBuf;
-	log_msg("Grabbed initial blocks\n");	
-	//Update head (super block)
-	head->userId=getuid();
-	head->groupId=getgid();
-	head->lastAccess=time(NULL);
-	head->lastMod=time(NULL);
-	head->lastStatus=time(NULL);
-	head->type=S_IFDIR;
+	block_read(SUPER_BLOCK,headBuf);
 
+	super * superBlock=(super *)headBuf;
+	if(superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
+		log_msg("Have to reformat\n");
+		//Update head (super block)
+		head=malloc(sizeof(inode));
+		strcpy(head->path,"");
+		head->firstChild=-1;
+		head->sibling=-1;
+		head->userId=getuid();
+		head->groupId=getgid();
+		head->lastAccess=time(NULL);
+		head->lastMod=time(NULL);
+		head->lastStatus=time(NULL);
+		head->type=S_IFDIR;
+		head->id=HEAD_BLOCK;
+	
+		bitmap[SUPER_BLOCK]=1;
+		bitmap[BM_BLOCK]=1;
+		bitmap[HEAD_BLOCK]=1;
+		superBlock->magicNumber=MAGIC_NUMBER;
+		superBlock->headNum=HEAD_BLOCK;
+		block_write(SUPER_BLOCK,(char *) superBlock);	
+		block_write(superBlock->headNum,(char *)head);
+		char bu[512];
+		block_read(superBlock->headNum,bu);
+
+		inode * yo=(inode *) bu;
+		log_msg("Retrieved value %d\n",yo->id );
+		log_msg("Wrote Head Block at: %d\n",superBlock->headNum);
+	}else{
+		block_read(superBlock->headNum,headBuf); //Can safely grab head block	
+		head=(inode *) headBuf;
+	}		
+	
 	log_conn(conn);
 	log_fuse_context(fuse_get_context());
 
@@ -143,6 +203,7 @@ void sfs_destroy(void *userdata)
 	log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 	block_write(HEAD_BLOCK,head);
 	block_write(BM_BLOCK,head);
+	disk_close(FILE_PATH);
 }
 
 /** Get file attributes.
@@ -200,8 +261,63 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	int retstat = 0;
 	log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
 			path, mode, fi);
-
-
+	inode tempNode;
+	int res=getInode(path,&tempNode);	
+	
+	//build components of path
+	/*char * part=strok(path,"/");	
+	char * arr[50];
+	int i=0;
+	while(part!=NULL){
+		arr[i]=part;
+		part=strtok(path,"/");
+		i++;
+	}*/
+	
+	if(res!=0){ //File not already there->can safely create
+		char temp[100];
+		memcpy(temp,path,strlen(path)+1);
+		char * ptr=temp;
+		while(ptr!=NULL){//Genereate a path string for new file's directory
+			char * tempPtr=strchr(ptr,"/");
+			if(tempPtr==NULL){
+				break;
+			}
+			tempPtr++;
+			ptr=tempPtr;
+		}
+		ptr[0]='\0'; //clips full path to be just path for directory
+		res=getInode(temp,&tempNode);
+		
+		if(res==0){ //Director exists->can safely place file in it
+			int newBlock=findFreeBlock();
+			if(newBlock!=-1){
+				inode newFile=createInode(ptr+1,S_IFREG,0,newBlock);	
+				int blockNum=tempNode.firstChild;
+				if(blockNum<=0){ //New file will be directory's first child
+					tempNode.firstChild=newBlock;	
+					block_write(tempNode.id,&tempNode);	
+				}else{ //New file will be sibling of pre-existent file
+					char buf[512];
+					block_read(blockNum,buf);
+					inode * ptr=(inode *)buf;
+					while(blockNum>0){
+						block_read(blockNum,buf);
+						ptr=(inode *)buf;
+						blockNum=ptr->sibling;
+					}
+					ptr->sibling=newBlock;
+					block_write(ptr->id,ptr);
+				}
+				block_write(newBlock,&newFile);	
+			}else{
+				retstat=-ENOMEM;
+			}	
+		}else{
+			retstat=-ENOENT;
+		}
+			
+	}
 	return retstat;
 }
 
@@ -369,7 +485,6 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 	log_msg("sfs_readdir\n");
 	filler(buf, ".",NULL,0);
 	filler(buf,"..",NULL,0);
-	filler(buf,"DEEZ NUTS",NULL,0);	
 	inode tar;
 	int res=getInode(path,&tar);
 	if(res==0){
@@ -381,7 +496,7 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 			filler(buf,curr->path,NULL,0);
 			inodeNum=curr->sibling;
 		}	
-	
+
 	}else{
 		retstat=res;
 	}
