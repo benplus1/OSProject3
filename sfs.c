@@ -124,6 +124,85 @@ int getInode(char * path, inode * buf){
 	}		
 }
 
+void deleteInode(char * path, inode * buf){
+
+	char buff[512];
+	block_read(HEAD_BLOCK,buff);
+	inode * ptr=buff;
+
+	char parentBuff[512];
+	block_read(HEAD_BLOCK, parentBuff);
+	inode * parentPtr = parentBuff;
+	int lastParentNum = HEAD_BLOCK;
+
+	char * token=strtok(path,"/");
+	int found=1;
+	while (ptr != NULL && token) { //check first set of children
+		printf("token %s\n", token);
+		int ptrNum = ptr->firstChild;
+		inode * childPtr;
+		found = 0;
+		char lastChildBuff[512];
+		inode * lastChildPtr;
+		inode * lastPtrNum;
+		if (ptrNum > 0) {//check first first child
+			block_read(ptrNum, buff);
+			childPtr = (inode *) buff;
+			if (strcmp(childPtr->path, token)==0) {
+				if (childPtr->sibling <= 0) {//no other siblings
+					parentPtr->firstChild = -1; //unlink
+					block_write(lastParentNum,parentBuff); //write change
+					return;
+				}
+				else {//one other sibling
+					parentPtr->firstChild = childPtr->sibling;
+					block_write(lastParentNum, parentBuff);	
+					return;
+				}
+			}
+			block_read(ptrNum, lastChildBuff);
+			lastChildPtr = (inode *) lastChildBuff;
+			lastPtrNum = ptrNum;
+
+			ptrNum=childPtr->sibling;
+		}
+		while (ptrNum > 0) {//now check the siblings of first first child
+			block_read(ptrNum, buff);
+			childPtr=(inode *) buff;
+			if (strcmp(childPtr->path, token)==0) {
+				if (childPtr->sibling < 0) {//last sibling
+					lastChildPtr->sibling = -1;
+					block_write(lastPtrNum, lastChildBuff);
+					return;
+				}
+				else {//skip sibling
+					lastChildPtr->sibling = childPtr->sibling;
+					block_write(lastPtrNum, lastChildBuff);
+					return;
+				}
+			}
+			block_read(ptrNum, lastChildBuff);
+			lastChildPtr = (inode *) lastChildBuff;
+			lastPtrNum = ptrNum;
+
+			ptrNum=childPtr->sibling;
+		}
+		if (ptrNum <= 0) {
+			log_msg("Failed traversing\n");
+			break;
+		}
+
+		block_read(ptrNum, parentBuff);
+		parentPtr=(inode *) parentBuff;
+		lastParentNum = ptrNum;
+
+		ptr = childPtr;
+		token = strtok(NULL, "/");
+	}
+
+	return;		
+}
+
 
 inode testInode(int blockNum){
 	char buf[512];
@@ -338,6 +417,8 @@ int sfs_unlink(const char *path)
 {
 	int retstat = 0;
 	log_msg("sfs_unlink(path=\"%s\")\n", path);
+	inode tempNode;
+	deleteInode(path, &tempNode);
 
 
 	return retstat;
