@@ -53,6 +53,9 @@ void copyInode(inode * dest, inode * target){
 	dest->lastStatus=target->lastStatus;
 	dest->type=target->type;
 	dest->id=target->id;
+	memcpy(dest->blocks,target->blocks,sizeof(int)*50);
+	memcpy(dest->blockPtrs,target->blockPtrs,sizeof(int)*10);
+	dest->totalSize=target->totalSize;
 }
 
 inode createInode(char * path, mode_t type, off_t offset, ino_t id){
@@ -78,6 +81,8 @@ int findFreeBlock(){
 	int i;
 	for(i=0;i<128;i++){
 		if(bitmap[i]==0){
+			char buff[512];
+			block_write(i,buff);
 			return i;
 		}
 	}
@@ -238,7 +243,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 	block_read(SUPER_BLOCK,headBuf);
 
 	super * superBlock=(super *)headBuf;
-	if(superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
+	if(1||superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
 		log_msg("Have to reformat\n");
 		//Update head (super block)
 		head=malloc(sizeof(inode));
@@ -252,7 +257,8 @@ void *sfs_init(struct fuse_conn_info *conn)
 		head->lastStatus=time(NULL);
 		head->type=S_IFDIR;
 		head->id=HEAD_BLOCK;
-	
+		
+		memset(bitmap,0,128);
 		bitmap[SUPER_BLOCK]=1;
 		bitmap[BM_BLOCK]=1;
 		bitmap[HEAD_BLOCK]=1;
@@ -270,11 +276,11 @@ void *sfs_init(struct fuse_conn_info *conn)
 	}else{
 		block_read(superBlock->headNum,headBuf); //Can safely grab head block	
 		head=(inode *) headBuf;
-		
+
 		block_read(BM_BLOCK,bitmap);
-		
+
 	}		
-	
+
 	log_conn(conn);
 	log_fuse_context(fuse_get_context());
 
@@ -353,17 +359,17 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 			path, mode, fi);
 	inode tempNode;
 	int res=getInode(path,&tempNode);	
-	
+
 	//build components of path
 	/*char * part=strok(path,"/");	
-	char * arr[50];
-	int i=0;
-	while(part!=NULL){
-		arr[i]=part;
-		part=strtok(path,"/");
-		i++;
-	}*/
-	
+	  char * arr[50];
+	  int i=0;
+	  while(part!=NULL){
+	  arr[i]=part;
+	  part=strtok(path,"/");
+	  i++;
+	  }*/
+
 	if(res!=0){ //File not already there->can safely create
 		char temp[100];
 		memcpy(temp,path,strlen(path)+1);
@@ -378,7 +384,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 		}
 		ptr[0]='\0'; //clips full path to be just path for directory
 		res=getInode(temp,&tempNode);
-		
+
 		if(res==0){ //Director exists->can safely place file in it
 			int newBlock=findFreeBlock();
 			if(newBlock!=-1){
@@ -407,7 +413,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 		}else{
 			retstat=-ENOENT;
 		}
-			
+
 	}
 	return retstat;
 }
@@ -484,9 +490,33 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 	int retstat = 0;
 	log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 			path, buf, size, offset, fi);
+	inode curr;
+	getInode(path,&curr);
+	int blockNum=(int)offset/512;
+	int blockOffset=offset%512;
 
+	int blockIndex=-1;
+	int writeSize=512-blockOffset;
+	int incSize=0;
+	while(incSize<size){
+		blockIndex=curr.blocks[blockNum];
+		char myBuf[512];
+		block_read(blockIndex,myBuf);
+		memcpy(buf+incSize,myBuf+blockOffset,writeSize);
+		blockNum++;
+		incSize+=writeSize;
+		int remSize=size-incSize;
+		if(remSize>=512){
+			writeSize=512;
+		}else{
+			writeSize=remSize;
+		}
+		blockOffset-=blockOffset;
+	}	
+	
+	
 
-	return retstat;
+	return curr.totalSize;
 }
 
 /** Write data to an open file
@@ -503,9 +533,41 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 	int retstat = 0;
 	log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 			path, buf, size, offset, fi);
+	inode curr;
+	getInode(path,&curr);
+	int blockNum=(int)offset/512;
+	int blockOffset=offset%512;
 
+	int blockIndex=-1;
 
-	return retstat;
+	int incSize=0;
+
+	while(incSize<size){
+		if(curr.blockCount<=blockNum){
+			int newBlock=findFreeBlock();
+			if(newBlock==-1) return ENOMEM;
+			blockIndex=newBlock;
+			curr.blockCount++;
+			curr.blocks[curr.blockCount-1]=blockIndex;
+		}else{
+			blockIndex=curr.blocks[blockNum];
+		}
+		int writeSize=512-blockOffset;
+		char myBuf[512];
+		block_read(blockIndex,myBuf);
+		memcpy(myBuf+blockOffset,buf+incSize,writeSize);
+		block_write(blockIndex,myBuf);
+		blockOffset-=blockOffset;
+		blockNum++;
+		incSize+=writeSize;
+	}	
+	
+	if(offset+size>curr.totalSize){
+		curr.totalSize=offset+size;
+	}
+		
+	block_write(curr.id,&curr);
+	return incSize;
 }
 
 

@@ -3,7 +3,6 @@
 #define _SFS_H_
 
 typedef struct inode{
-	char path[100];
 	ino_t id;
 	int firstChild;
 	int sibling;
@@ -16,6 +15,10 @@ typedef struct inode{
 	time_t lastMod;
 	time_t lastStatus;
 	mode_t type;
+	int totalSize;
+	int blocks[50];
+	int * blockPtrs[10];
+	char path[100];
 } inode;
 
 typedef struct super_block{
