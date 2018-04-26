@@ -2,7 +2,7 @@
 cd ../
 make clean
 make
-fusermount -u /tmp/hkc33/mountdir
+fusermount -u /tmp/bty10/mountdir
 cd ./src/
-./sfs  /.freespace/hkc/testfsfile /tmp/hkc33/mountdir
+./sfs  /.freespace/bty10/testfsfile /tmp/bty10/mountdir
 ps -ef | grep sfs

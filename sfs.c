@@ -34,7 +34,7 @@ const int BM_BLOCK=1;
 const int MAGIC_NUMBER=1234;
 const int HEAD_BLOCK=2;
 
-char * FILE_PATH="/.freespace/hkc33/testfsfile";
+char * FILE_PATH="/.freespace/bty10/testfsfile";
 int bitmap[128];
 char headBuf[512];
 inode * head;
@@ -129,7 +129,7 @@ int getInode(char * path, inode * buf){
 	}		
 }
 
-void deleteInode(char * path, inode * buf){
+int deleteInode(char * path, inode * buf){
 
 	char buff[512];
 	block_read(HEAD_BLOCK,buff);
@@ -157,12 +157,14 @@ void deleteInode(char * path, inode * buf){
 				if (childPtr->sibling <= 0) {//no other siblings
 					parentPtr->firstChild = -1; //unlink
 					block_write(lastParentNum,parentBuff); //write change
-					return;
+					bitmap[ptrNum] = 0;
+					return 0;
 				}
 				else {//one other sibling
 					parentPtr->firstChild = childPtr->sibling;
-					block_write(lastParentNum, parentBuff);	
-					return;
+					block_write(lastParentNum, parentBuff);
+					bitmap[ptrNum] = 0;	
+					return 0;
 				}
 			}
 			block_read(ptrNum, lastChildBuff);
@@ -178,12 +180,14 @@ void deleteInode(char * path, inode * buf){
 				if (childPtr->sibling < 0) {//last sibling
 					lastChildPtr->sibling = -1;
 					block_write(lastPtrNum, lastChildBuff);
-					return;
+					bitmap[ptrNum] = 0;
+					return 0;
 				}
 				else {//skip sibling
 					lastChildPtr->sibling = childPtr->sibling;
 					block_write(lastPtrNum, lastChildBuff);
-					return;
+					bitmap[ptrNum] = 0;
+					return 0;
 				}
 			}
 			block_read(ptrNum, lastChildBuff);
@@ -205,7 +209,7 @@ void deleteInode(char * path, inode * buf){
 		token = strtok(NULL, "/");
 	}
 
-	return;		
+	return -ENOENT;		
 }
 
 
@@ -424,7 +428,7 @@ int sfs_unlink(const char *path)
 	int retstat = 0;
 	log_msg("sfs_unlink(path=\"%s\")\n", path);
 	inode tempNode;
-	deleteInode(path, &tempNode);
+	retstat = deleteInode(path, &tempNode);
 
 
 	return retstat;
@@ -545,7 +549,11 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 	while(incSize<size){
 		if(curr.blockCount<=blockNum){
 			int newBlock=findFreeBlock();
-			if(newBlock==-1) return ENOMEM;
+			log_msg("new block id is %d", newBlock);
+			if(newBlock==-1) {\
+				log_msg("fucked");
+				return ENOMEM;
+			}
 			blockIndex=newBlock;
 			curr.blockCount++;
 			curr.blocks[curr.blockCount-1]=blockIndex;
@@ -567,6 +575,8 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 	}
 		
 	block_write(curr.id,&curr);
+	
+	log_msg("%d\n",incSize);
 	return incSize;
 }
 
