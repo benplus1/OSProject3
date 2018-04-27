@@ -33,11 +33,22 @@ const int SUPER_BLOCK=0;
 const int BM_BLOCK=1;
 const int MAGIC_NUMBER=1234;
 const int HEAD_BLOCK=2;
-
+int BLOCK_COUNT=128;
 char * FILE_PATH="/.freespace/hemanth/testfsfile";
 int bitmap[128];
 char headBuf[512];
 inode * head;
+
+int getUsedBlockCount(){
+	int count=0;
+	int i=0;
+	for(i=0;i<BLOCK_COUNT;i++){
+		if(bitmap[i]==1){
+			count++;
+		}
+	}
+	return count;
+}
 
 void copyInode(inode * dest, inode * target){
 	strcpy(dest->path,target->path);
@@ -92,6 +103,28 @@ int findFreeBlock(){
 	return -1;
 }
 
+int getInodeBlock(inode * curr,int blockNum){
+	if(blockNum<10){
+		return curr->blocks[blockNum];
+	}else{
+		return curr->blocks[0]; //NEED TO FIX FOR INDIRENT
+	}
+}
+
+void freeBlocks(inode * curr){
+	int blockCount=curr->blockCount;
+	int i;
+	for (i=0;i<blockCount;i++){
+		int blockIndex=getInodeBlock(curr,i);		
+		freeBlock(blockIndex);
+	}
+}
+
+void freeBlock(int index){
+	char clear[512];
+	block_write(index,clear);
+	bitmap[index]=0;
+}
 
 int getInode(char * realPath, inode * buf){
 	char path[512];
@@ -338,7 +371,6 @@ int deleteInode(char * path){
 		prev->sibling=curr.sibling;
 		block_write(prev->id,prev);
 	}
-	
 	block_write(parent.id,&parent);
 	freeInode(&curr);
 	return res;
@@ -347,11 +379,7 @@ int deleteInode(char * path){
 void freeInode(inode * curr){
 	bitmap[curr->id]=0;
 	char clear[512];
-	int i;
-	for(i=0;i<curr->blockCount;i++){
-		bitmap[curr->blocks[i]]=0;
-		block_write(curr->blocks[i],clear);
-	}	
+	freeBlocks(curr);
 	block_write(curr->id,clear);
 }
 inode testInode(int blockNum){
@@ -425,7 +453,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 		block_read(BM_BLOCK,bitmap);
 
 	}		
-
+	log_msg("Starting Num Used Blocks: %d\n", getUsedBlockCount());
 	log_conn(conn);
 	log_fuse_context(fuse_get_context());
 
@@ -517,6 +545,7 @@ int sfs_unlink(const char *path)
 	retstat = deleteInode(path);
 
 	log_msg("Result Unlink %s: %d\n", path,retstat);
+	log_msg("Num Used Blocks %d\n", getUsedBlockCount());
 	return retstat;
 }
 
@@ -688,6 +717,7 @@ int sfs_rmdir(const char *path)
 	inode tempNode;
 	retstat = deleteInode(path);
 
+	log_msg("Num Used Blocks %d\n", getUsedBlockCount());
 
 	return retstat;
 }
