@@ -200,7 +200,7 @@ int insertInode(char * path, mode_t type){
 
 }
 
-int deleteInode(char * realPath, inode * buf){
+/*int deleteInode(char * realPath, inode * buf){
 	char path[512];
 	strcpy(path,realPath);
 	char buff[512];
@@ -282,9 +282,73 @@ int deleteInode(char * realPath, inode * buf){
 	}
 
 	return -ENOENT;		
+}*/
+
+
+int deleteInode(char * path){
+	int res=0;
+	inode curr;
+	res=getInode(path,&curr); //Get current inode
+	if(res!=0) return res;
+
+
+	char temp[100];
+	memcpy(temp,path,strlen(path)+1);
+	char * ptr=temp;
+	log_msg("Start %s\n", ptr);
+	while(ptr!=NULL){//Genereate a path string for new file's directory
+		char * tempPtr=strchr(ptr,'/');
+		if(tempPtr==NULL){
+			break;
+		}
+		tempPtr++;
+		ptr=tempPtr;
+		log_msg("Part %s\n", ptr);	
+	}
+	if(ptr!=temp){
+		*(ptr-1)='\0';//clips full path to be just path for directory
+	}
+	
+	inode parent;
+	getInode(temp,&parent); //Get parent inode
+	
+	int prevBlockNum=-1;
+	int ptrBlockNum=parent.firstChild;
+	while(ptrBlockNum!=-1){
+		char buf[512];
+		block_read(ptrBlockNum,buf);
+		inode * ptr=buf;
+		if(strcmp(ptr->path,curr.path)==0){
+			log_msg("Found inode to delete \n", ptr->path);
+			break;
+		}
+		prevBlockNum=ptrBlockNum;
+		ptrBlockNum=ptr->sibling;
+	}
+	if(prevBlockNum==-1){
+		parent.firstChild=curr.sibling;
+	}else{
+		char buf[512];
+		block_read(prevBlockNum, buf);
+		inode * prev=buf;
+		prev->sibling=curr.sibling;
+		block_write(prev->id,prev);
+	}
+	
+	block_write(parent.id,&parent);
+	freeInode(&curr);
 }
 
-
+void freeInode(inode * curr){
+	bitmap[curr->id]=0;
+	char clear[512];
+	int i;
+	for(i=0;i<curr->blockCount;i++){
+		bitmap[curr->blocks[i]]=0;
+		block_write(curr->blocks[i],clear);
+	}	
+	block_write(curr->id,clear);
+}
 inode testInode(int blockNum){
 	char buf[512];
 	block_read(blockNum,buf);
@@ -319,7 +383,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 	block_read(SUPER_BLOCK,headBuf);
 
 	super * superBlock=(super *)headBuf;
-	if(superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
+	if(1||superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
 		log_msg("Have to reformat\n");
 		//Update head (super block)
 		head=malloc(sizeof(inode));
@@ -333,7 +397,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 		head->lastStatus=time(NULL);
 		head->type=S_IFDIR;
 		head->id=HEAD_BLOCK;
-		
+
 		memset(bitmap,0,128);
 		bitmap[SUPER_BLOCK]=1;
 		bitmap[BM_BLOCK]=1;
@@ -435,6 +499,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
 			path, mode, fi);
 	retstat=insertInode(path, S_IFREG);
+	return retstat;
 }
 
 /** Remove a file */
@@ -443,7 +508,7 @@ int sfs_unlink(const char *path)
 	int retstat = 0;
 	log_msg("sfs_unlink(path=\"%s\")\n", path);
 	inode tempNode;
-	retstat = deleteInode(path, &tempNode);
+	retstat = deleteInode(path);
 
 
 	return retstat;
@@ -532,8 +597,8 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 		}
 		blockOffset-=blockOffset;
 	}	
-	
-	
+
+
 
 	return curr.totalSize;
 }
@@ -584,13 +649,13 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 		blockNum++;
 		incSize+=writeSize;
 	}	
-	
+
 	if(offset+size>curr.totalSize){
 		curr.totalSize=offset+size;
 	}
-		
+
 	block_write(curr.id,&curr);
-	
+
 	log_msg("%d\n",incSize);
 	return incSize;
 }
@@ -602,69 +667,7 @@ int sfs_mkdir(const char *path, mode_t mode)
 	int retstat = 0;
 	log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
 			path, mode);
-	inode tempNode;
-	int res=getInode(path,&tempNode);	
-
-	//build components of path
-	/*char * part=strok(path,"/");	
-	  char * arr[50];
-	  int i=0;
-	  while(part!=NULL){
-	  arr[i]=part;
-	  part=strtok(path,"/");
-	  i++;
-	  }*/
-
-	if(res!=0){ //Directory not already there->can safely create
-		char temp[100];
-		memcpy(temp,path,strlen(path)+1);
-		char * ptr=temp;
-		log_msg("Start %s\n",ptr);
-		while(ptr!=NULL){//Genereate a path string for new directory's directory
-			char * tempPtr=strchr(ptr,'/');
-			if(tempPtr==NULL){
-				break;
-			}
-			tempPtr++;
-			ptr=tempPtr;
-			log_msg("Part %s\n",ptr);
-		}
-		if(ptr!=temp){
-			*(ptr-1)='\0';//clips full path to be just path for directory
-		}
-		res=getInode(temp,&tempNode);
-
-		if(res==0){ //Director exists->can safely place file in it
-			int newBlock=findFreeBlock();
-			if(newBlock!=-1){
-				inode newFile=createInode(ptr,S_IFDIR,0,newBlock);	
-				int blockNum=tempNode.firstChild;
-				if(blockNum<=0){ //New file will be directory's first child
-					tempNode.firstChild=newBlock;	
-					block_write(tempNode.id,&tempNode);	
-				}else{ //New file will be sibling of pre-existent file
-					char buf[512];
-					block_read(blockNum,buf);
-					inode * ptr=(inode *)buf;
-					while(blockNum>0){
-						block_read(blockNum,buf);
-						ptr=(inode *)buf;
-						blockNum=ptr->sibling;
-					}
-					ptr->sibling=newBlock;
-					block_write(ptr->id,ptr);
-				}
-				block_write(newBlock,&newFile);	
-				bitmap[newBlock]=1;
-			}else{
-				retstat=-ENOMEM;
-			}	
-		}else{
-			retstat=-ENOENT;
-		}
-
-	}
-
+	retstat=insertInode(path,S_IFDIR);
 	return retstat;
 }
 
@@ -675,9 +678,9 @@ int sfs_rmdir(const char *path)
 	int retstat = 0;
 	log_msg("sfs_rmdir(path=\"%s\")\n",
 			path);
-	
+
 	inode tempNode;
-	retstat = deleteInode(path, &tempNode);
+	retstat = deleteInode(path);
 
 
 	return retstat;
