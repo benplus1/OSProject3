@@ -83,6 +83,7 @@ int findFreeBlock(){
 	int i;
 	for(i=0;i<128;i++){
 		if(bitmap[i]==0){
+			bitmap[i]=1;
 			char buff[512];
 			block_write(i,buff);
 			return i;
@@ -195,6 +196,9 @@ int insertInode(char * path, mode_t type){
 			retstat=-ENOENT;
 		}
 
+	}else{
+		log_msg("File %s exists\n",path);
+		retstat=EEXIST;
 	}
 	return retstat;
 
@@ -337,6 +341,7 @@ int deleteInode(char * path){
 	
 	block_write(parent.id,&parent);
 	freeInode(&curr);
+	return res;
 }
 
 void freeInode(inode * curr){
@@ -475,6 +480,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
 		statbuf->st_mode=target->type;
 		statbuf->st_size=target->totalSize;
 	}else{
+		log_msg("File %s\n does not exist\n", path);
 		retstat=-ENOENT;
 	} 
 	log_msg("Stat result: %d\n",retstat);
@@ -510,7 +516,7 @@ int sfs_unlink(const char *path)
 	inode tempNode;
 	retstat = deleteInode(path);
 
-
+	log_msg("Result Unlink %s: %d\n", path,retstat);
 	return retstat;
 }
 
