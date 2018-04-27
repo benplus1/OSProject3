@@ -1,0 +1,314 @@
+Process ID: 27436
+
+sfs_init()
+Have to reformat
+Retrieved value 2
+Wrote Head Block at: 2
+Starting Num Used Blocks: 11
+    conn:
+    proto_major = 7
+    proto_minor = 22
+    async_read = 1
+    max_write = 131072
+    max_readahead = 131072
+    capable = 00000ffb
+    want = 00000010
+    context:
+    fuse = 008434b0
+    uid = 0
+    gid = 0
+    pid = 0
+    private_data = 00843010
+    logfile = 00843030
+    diskfile = /.freespace/hkc33/testfsfile
+    umask = 00000
+Done initing
+
+sfs_getattr(path="/firstdir", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir
+ does not exist
+Stat result: -2
+
+sfs_mkdir(path="/firstdir", mode=0700)
+Failed traversing
+Start /firstdir
+Part firstdir
+
+sfs_getattr(path="/firstdir", statbuf=0x3752ec40)
+Stat result: 0
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir/bruh1
+ does not exist
+Stat result: -2
+
+sfs_create(path="/firstdir/bruh1", mode=0100600, fi=0x3752ecf0)
+Failed traversing
+Start /firstdir/bruh1
+Part firstdir/bruh1
+Part bruh1
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x3752ec00)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh1", fi=0x3752ecf0)
+
+sfs_open(path"/firstdir/bruh1", fi=0x36d2dcf0)
+
+sfs_write(path="/firstdir/bruh1", buf=0x3811e060, size=12, offset=0, fi=0x36d2dd70)
+new block id is 5512
+
+sfs_release(path="/firstdir/bruh1", fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir/bruh2
+ does not exist
+Stat result: -2
+
+sfs_create(path="/firstdir/bruh2", mode=0100600, fi=0x3752ecf0)
+Failed traversing
+Start /firstdir/bruh2
+Part firstdir/bruh2
+Part bruh2
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x3752ec00)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh2", fi=0x36d2dcf0)
+
+sfs_open(path"/firstdir/bruh2", fi=0x3752ecf0)
+
+sfs_write(path="/firstdir/bruh2", buf=0x3811e060, size=12, offset=0, fi=0x36d2dd70)
+new block id is 7512
+
+sfs_release(path="/firstdir/bruh2", fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir", fi=0x3752ec30)
+sfs_readdir
+
+sfs_open(path"/firstdir/bruh1", fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_read(path="/firstdir/bruh1", buf=0x30000f50, size=4096, offset=0, fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh1", fi=0x3752ecf0)
+
+sfs_open(path"/firstdir/bruh2", fi=0x36d2dcf0)
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x3752ec10)
+Stat result: 0
+
+sfs_read(path="/firstdir/bruh2", buf=0x28000af0, size=4096, offset=0, fi=0x36d2dcf0)
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x3752ec10)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh2", fi=0x36d2dcf0)
+sfs_unlink(path="/firstdir/bruh2")
+Start /firstdir/bruh2
+Part firstdir/bruh2
+Part bruh2
+Found inode to delete 
+Result Unlink /firstdir/bruh2: 0
+Num Used Blocks 14
+sfs_unlink(path="/firstdir/bruh1")
+Start /firstdir/bruh1
+Part firstdir/bruh1
+Part bruh1
+Found inode to delete 
+Result Unlink /firstdir/bruh1: 0
+Num Used Blocks 12
+
+sfs_getattr(path="/firstdir", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir", fi=0x3752ec30)
+sfs_readdir
+
+sfs_getattr(path="/firstdir", statbuf=0x3752ec40)
+Stat result: 0
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir/bruh1
+ does not exist
+Stat result: -2
+
+sfs_mkdir(path="/firstdir/bruh1", mode=0700)
+Failed traversing
+Start /firstdir/bruh1
+Part firstdir/bruh1
+Part bruh1
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x3752ec40)
+Stat result: 0
+
+sfs_getattr(path="/firstdir/bruh1/test.txt", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir/bruh1/test.txt
+ does not exist
+Stat result: -2
+
+sfs_create(path="/firstdir/bruh1/test.txt", mode=0100600, fi=0x3752ecf0)
+Failed traversing
+Start /firstdir/bruh1/test.txt
+Part firstdir/bruh1/test.txt
+Part bruh1/test.txt
+Part test.txt
+
+sfs_getattr(path="/firstdir/bruh1/test.txt", statbuf=0x3752ec00)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh1/test.txt", fi=0x36d2dcf0)
+
+sfs_open(path"/firstdir/bruh1/test.txt", fi=0x3752ecf0)
+
+sfs_write(path="/firstdir/bruh1/test.txt", buf=0x3811e060, size=12, offset=0, fi=0x36d2dd70)
+new block id is 6512
+
+sfs_release(path="/firstdir/bruh1/test.txt", fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir/bruh2
+ does not exist
+Stat result: -2
+
+sfs_mkdir(path="/firstdir/bruh2", mode=0700)
+Failed traversing
+Start /firstdir/bruh2
+Part firstdir/bruh2
+Part bruh2
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x3752ec40)
+Stat result: 0
+
+sfs_getattr(path="/firstdir/bruh2/test.txt", statbuf=0x36d2dc40)
+Failed traversing
+File /firstdir/bruh2/test.txt
+ does not exist
+Stat result: -2
+
+sfs_create(path="/firstdir/bruh2/test.txt", mode=0100600, fi=0x3752ecf0)
+Failed traversing
+Start /firstdir/bruh2/test.txt
+Part firstdir/bruh2/test.txt
+Part bruh2/test.txt
+Part test.txt
+
+sfs_getattr(path="/firstdir/bruh2/test.txt", statbuf=0x3752ec00)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh2/test.txt", fi=0x36d2dcf0)
+
+sfs_open(path"/firstdir/bruh2/test.txt", fi=0x3752ecf0)
+
+sfs_write(path="/firstdir/bruh2/test.txt", buf=0x3811e060, size=12, offset=0, fi=0x36d2dd70)
+new block id is 9512
+
+sfs_release(path="/firstdir/bruh2/test.txt", fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir", fi=0x3752ec30)
+sfs_readdir
+
+sfs_open(path"/firstdir/bruh1/test.txt", fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir/bruh1/test.txt", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_read(path="/firstdir/bruh1/test.txt", buf=0x30000f50, size=4096, offset=0, fi=0x3752ecf0)
+
+sfs_getattr(path="/firstdir/bruh1/test.txt", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh1/test.txt", fi=0x3752ecf0)
+
+sfs_open(path"/firstdir/bruh2/test.txt", fi=0x36d2dcf0)
+
+sfs_getattr(path="/firstdir/bruh2/test.txt", statbuf=0x3752ec10)
+Stat result: 0
+
+sfs_read(path="/firstdir/bruh2/test.txt", buf=0x28000af0, size=4096, offset=0, fi=0x36d2dcf0)
+
+sfs_getattr(path="/firstdir/bruh2/test.txt", statbuf=0x3752ec10)
+Stat result: 0
+
+sfs_release(path="/firstdir/bruh2/test.txt", fi=0x36d2dcf0)
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x3752ec10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir/bruh1", fi=0x36d2dc30)
+sfs_readdir
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x3752ec10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir/bruh1", fi=0x36d2dc30)
+sfs_readdir
+sfs_unlink(path="/firstdir/bruh1/test.txt")
+Start /firstdir/bruh1/test.txt
+Part firstdir/bruh1/test.txt
+Part bruh1/test.txt
+Part test.txt
+Found inode to delete 
+Result Unlink /firstdir/bruh1/test.txt: 0
+Num Used Blocks 16
+
+sfs_getattr(path="/firstdir/bruh1", statbuf=0x3752ec10)
+Stat result: 0
+sfs_rmdir(path="/firstdir/bruh1")
+Start /firstdir/bruh1
+Part firstdir/bruh1
+Part bruh1
+Found inode to delete 
+Num Used Blocks 15
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir/bruh2", fi=0x3752ec30)
+sfs_readdir
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir/bruh2", fi=0x3752ec30)
+sfs_readdir
+sfs_unlink(path="/firstdir/bruh2/test.txt")
+Start /firstdir/bruh2/test.txt
+Part firstdir/bruh2/test.txt
+Part bruh2/test.txt
+Part test.txt
+Found inode to delete 
+Result Unlink /firstdir/bruh2/test.txt: 0
+Num Used Blocks 13
+
+sfs_getattr(path="/firstdir/bruh2", statbuf=0x3752ec10)
+Stat result: 0
+sfs_rmdir(path="/firstdir/bruh2")
+Start /firstdir/bruh2
+Part firstdir/bruh2
+Part bruh2
+Found inode to delete 
+Num Used Blocks 12
+
+sfs_getattr(path="/firstdir", statbuf=0x36d2dc10)
+Stat result: 0
+
+sfs_opendir(path="/firstdir", fi=0x3752ec30)
+sfs_readdir
