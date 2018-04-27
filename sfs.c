@@ -432,6 +432,10 @@ void *sfs_init(struct fuse_conn_info *conn)
 		head->id=HEAD_BLOCK;
 
 		memset(bitmap,0,128);
+		int i;
+		for(i=0;i<BLOCK_COUNT;i++){
+			bitmap[i]=0;
+		}
 		bitmap[SUPER_BLOCK]=1;
 		bitmap[BM_BLOCK]=1;
 		bitmap[HEAD_BLOCK]=1;
@@ -667,7 +671,8 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 			log_msg("new block id is %d\n", newBlock);
 			if(newBlock==-1) {\
 				log_msg("fucked");
-				return ENOMEM;
+				size=incSize;
+				return size;
 			}
 			blockIndex=newBlock;
 			curr.blockCount++;
@@ -691,8 +696,8 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 
 	block_write(curr.id,&curr);
 
-	log_msg("%d\n",incSize);
-	return incSize;
+	log_msg("Size written: %d\n",size);
+	return size;
 }
 
 
