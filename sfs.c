@@ -664,7 +664,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 	while(incSize<size){
 		if(curr.blockCount<=blockNum){
 			int newBlock=findFreeBlock();
-			log_msg("new block id is %d", newBlock);
+			log_msg("new block id is %d\n", newBlock);
 			if(newBlock==-1) {\
 				log_msg("fucked");
 				return ENOMEM;
