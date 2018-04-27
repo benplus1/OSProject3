@@ -52,6 +52,7 @@ void copyInode(inode * dest, inode * target){
 	dest->lastMod=target->lastMod;
 	dest->lastStatus=target->lastStatus;
 	dest->type=target->type;
+	dest->totalSize=target->totalSize;
 	dest->id=target->id;
 	memcpy(dest->blocks,target->blocks,sizeof(int)*50);
 	memcpy(dest->blockPtrs,target->blockPtrs,sizeof(int)*10);
@@ -337,6 +338,7 @@ int sfs_getattr(const char *path, struct stat *statbuf)
 		statbuf->st_mtime=target->lastMod;
 		statbuf->st_ctime=target->lastStatus;
 		statbuf->st_mode=target->type;
+		statbuf->st_size=target->totalSize;
 	}else{
 		retstat=-ENOENT;
 	} 
@@ -587,7 +589,66 @@ int sfs_mkdir(const char *path, mode_t mode)
 	int retstat = 0;
 	log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
 			path, mode);
+	inode tempNode;
+	int res=getInode(path,&tempNode);	
 
+	//build components of path
+	/*char * part=strok(path,"/");	
+	  char * arr[50];
+	  int i=0;
+	  while(part!=NULL){
+	  arr[i]=part;
+	  part=strtok(path,"/");
+	  i++;
+	  }*/
+
+	if(res!=0){ //Directory not already there->can safely create
+		char temp[100];
+		memcpy(temp,path,strlen(path)+1);
+		char * ptr=temp;
+		log_msg("Start %s\n",ptr);
+		while(ptr!=NULL){//Genereate a path string for new directory's directory
+			char * tempPtr=strchr(ptr,"/");
+			if(tempPtr==NULL){
+				break;
+			}
+			tempPtr++;
+			ptr=tempPtr;
+			log_msg("Part %s\n",ptr);
+		}
+		ptr[0]='\0'; //clips full path to be just path for directory
+		res=getInode(temp,&tempNode);
+
+		if(res==0){ //Director exists->can safely place file in it
+			int newBlock=findFreeBlock();
+			if(newBlock!=-1){
+				inode newFile=createInode(ptr+1,S_IFDIR,0,newBlock);	
+				int blockNum=tempNode.firstChild;
+				if(blockNum<=0){ //New file will be directory's first child
+					tempNode.firstChild=newBlock;	
+					block_write(tempNode.id,&tempNode);	
+				}else{ //New file will be sibling of pre-existent file
+					char buf[512];
+					block_read(blockNum,buf);
+					inode * ptr=(inode *)buf;
+					while(blockNum>0){
+						block_read(blockNum,buf);
+						ptr=(inode *)buf;
+						blockNum=ptr->sibling;
+					}
+					ptr->sibling=newBlock;
+					block_write(ptr->id,ptr);
+				}
+				block_write(newBlock,&newFile);	
+				bitmap[newBlock]=1;
+			}else{
+				retstat=-ENOMEM;
+			}	
+		}else{
+			retstat=-ENOENT;
+		}
+
+	}
 
 	return retstat;
 }
