@@ -1,0 +1,108 @@
+Process ID: 18837
+
+sfs_init()
+    conn:
+    proto_major = 7
+    proto_minor = 22
+    async_read = 1
+    max_write = 131072
+    max_readahead = 131072
+    capable = 00000ffb
+    want = 00000010
+    context:
+    fuse = 00f7b4b0
+    uid = 0
+    gid = 0
+    pid = 0
+    private_data = 00f7b010
+    logfile = 00f7b030
+    diskfile = /.freespace/hkc33/testfsfile
+    umask = 00000
+Done initing
+
+sfs_getattr(path="/", statbuf=0x47f5cc10)
+Stat result: 0
+
+sfs_opendir(path="/", fi=0x4775bc30)
+sfs_readdir
+
+sfs_getattr(path="/", statbuf=0x4775bc10)
+Stat result: 0
+
+sfs_getattr(path="/tddr.txt", statbuf=0x47f5cc40)
+Failed traversing
+Stat result: -2
+
+sfs_create(path="/tddr.txt", mode=0100600, fi=0x4775bcf0)
+Failed traversing
+Start /tddr.txt
+Part tddr.txt
+
+sfs_getattr(path="/tddr.txt", statbuf=0x4775bc00)
+Stat result: 0
+
+sfs_release(path="/tddr.txt", fi=0x4775bcf0)
+
+sfs_getattr(path="/", statbuf=0x47f5cc10)
+Stat result: 0
+
+sfs_opendir(path="/", fi=0x4775bc30)
+sfs_readdir
+
+sfs_getattr(path="/tddr.txt", statbuf=0x4775bc40)
+Stat result: 0
+
+sfs_getattr(path="/", statbuf=0x4775bc10)
+Stat result: 0
+
+sfs_getattr(path="/", statbuf=0x47f5cc10)
+Stat result: 0
+
+sfs_opendir(path="/", fi=0x4775bc30)
+sfs_readdir
+
+sfs_getattr(path="/tddr.txt", statbuf=0x4775bc40)
+Stat result: 0
+
+sfs_getattr(path="/", statbuf=0x47f5cc10)
+Stat result: 0
+
+sfs_opendir(path="/", fi=0x4775bc30)
+sfs_readdir
+
+sfs_getattr(path="/tddr.txt", statbuf=0x4775bc40)
+Stat result: 0
+
+sfs_open(path"/tddr.txt", fi=0x47f5ccf0)
+
+sfs_write(path="/tddr.txt", buf=0x48b4c060, size=9, offset=0, fi=0x4775bd70)
+new block id is 4512
+
+sfs_release(path="/tddr.txt", fi=0x47f5ccf0)
+
+sfs_getattr(path="/", statbuf=0x4775bc10)
+Stat result: 0
+
+sfs_getattr(path="/", statbuf=0x47f5cc10)
+Stat result: 0
+
+sfs_opendir(path="/", fi=0x4775bc30)
+sfs_readdir
+
+sfs_getattr(path="/tddr.txt", statbuf=0x4775bc40)
+Stat result: 0
+
+sfs_getattr(path="/", statbuf=0x47f5cc10)
+Stat result: 0
+
+sfs_opendir(path="/", fi=0x4775bc30)
+sfs_readdir
+
+sfs_open(path"/tddr.txt", fi=0x4775bcf0)
+
+sfs_read(path="/tddr.txt", buf=0x40000d70, size=4096, offset=0, fi=0x47f5ccf0)
+
+sfs_getattr(path="/tddr.txt", statbuf=0x4775bc10)
+Stat result: 0
+
+sfs_release(path="/tddr.txt", fi=0x47f5ccf0)

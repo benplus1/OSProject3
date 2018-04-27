@@ -34,7 +34,7 @@ const int BM_BLOCK=1;
 const int MAGIC_NUMBER=1234;
 const int HEAD_BLOCK=2;
 
-char * FILE_PATH="/.freespace/bty10/testfsfile";
+char * FILE_PATH="/.freespace/hemanth/testfsfile";
 int bitmap[128];
 char headBuf[512];
 inode * head;
@@ -54,6 +54,7 @@ void copyInode(inode * dest, inode * target){
 	dest->type=target->type;
 	dest->totalSize=target->totalSize;
 	dest->id=target->id;
+	dest->totalSize=target->totalSize;
 	memcpy(dest->blocks,target->blocks,sizeof(int)*50);
 	memcpy(dest->blockPtrs,target->blockPtrs,sizeof(int)*10);
 	dest->totalSize=target->totalSize;
@@ -91,8 +92,9 @@ int findFreeBlock(){
 }
 
 
-int getInode(char * path, inode * buf){
-
+int getInode(char * realPath, inode * buf){
+	char path[512];
+	strcpy(path,realPath);
 	char buff[512];
 	block_read(HEAD_BLOCK,buff);
 	inode * ptr=buff;
@@ -130,8 +132,77 @@ int getInode(char * path, inode * buf){
 	}		
 }
 
-int deleteInode(char * path, inode * buf){
+int insertInode(char * path, mode_t type){
+	int retstat=0;
+	inode tempNode;
+	int res=getInode(path,&tempNode);	
 
+	//build components of path
+	/*char * part=strok(path,"/");	
+	  char * arr[50];
+	  int i=0;
+	  while(part!=NULL){
+	  arr[i]=part;
+	  part=strtok(path,"/");
+	  i++;
+	  }*/
+
+	if(res!=0){ //File not already there->can safely create
+		char temp[100];
+		memcpy(temp,path,strlen(path)+1);
+		char * ptr=temp;
+		log_msg("Start %s\n", ptr);
+		while(ptr!=NULL){//Genereate a path string for new file's directory
+			char * tempPtr=strchr(ptr,'/');
+			if(tempPtr==NULL){
+				break;
+			}
+			tempPtr++;
+			ptr=tempPtr;
+			log_msg("Part %s\n", ptr);	
+		}
+		if(ptr!=temp){
+			*(ptr-1)='\0';//clips full path to be just path for directory
+		}
+		res=getInode(temp,&tempNode);
+
+		if(res==0){ //Director exists->can safely place file in it
+			int newBlock=findFreeBlock();
+			if(newBlock!=-1){
+				inode newFile=createInode(ptr,type,0,newBlock);	
+				int blockNum=tempNode.firstChild;
+				if(blockNum<=0){ //New file will be directory's first child
+					tempNode.firstChild=newBlock;	
+					block_write(tempNode.id,&tempNode);	
+				}else{ //New file will be sibling of pre-existent file
+					char buf[512];
+					block_read(blockNum,buf);
+					inode * ptr=(inode *)buf;
+					while(blockNum>0){
+						block_read(blockNum,buf);
+						ptr=(inode *)buf;
+						blockNum=ptr->sibling;
+					}
+					ptr->sibling=newBlock;
+					block_write(ptr->id,ptr);
+				}
+				block_write(newBlock,&newFile);	
+				bitmap[newBlock]=1;
+			}else{
+				retstat=-ENOMEM;
+			}	
+		}else{
+			retstat=-ENOENT;
+		}
+
+	}
+	return retstat;
+
+}
+
+int deleteInode(char * realPath, inode * buf){
+	char path[512];
+	strcpy(path,realPath);
 	char buff[512];
 	block_read(HEAD_BLOCK,buff);
 	inode * ptr=buff;
@@ -248,7 +319,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 	block_read(SUPER_BLOCK,headBuf);
 
 	super * superBlock=(super *)headBuf;
-	if(1||superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
+	if(superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
 		log_msg("Have to reformat\n");
 		//Update head (super block)
 		head=malloc(sizeof(inode));
@@ -363,65 +434,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	int retstat = 0;
 	log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
 			path, mode, fi);
-	inode tempNode;
-	int res=getInode(path,&tempNode);	
-
-	//build components of path
-	/*char * part=strok(path,"/");	
-	  char * arr[50];
-	  int i=0;
-	  while(part!=NULL){
-	  arr[i]=part;
-	  part=strtok(path,"/");
-	  i++;
-	  }*/
-
-	if(res!=0){ //File not already there->can safely create
-		char temp[100];
-		memcpy(temp,path,strlen(path)+1);
-		char * ptr=temp;
-		while(ptr!=NULL){//Genereate a path string for new file's directory
-			char * tempPtr=strchr(ptr,"/");
-			if(tempPtr==NULL){
-				break;
-			}
-			tempPtr++;
-			ptr=tempPtr;
-		}
-		ptr[0]='\0'; //clips full path to be just path for directory
-		res=getInode(temp,&tempNode);
-
-		if(res==0){ //Director exists->can safely place file in it
-			int newBlock=findFreeBlock();
-			if(newBlock!=-1){
-				inode newFile=createInode(ptr+1,S_IFREG,0,newBlock);	
-				int blockNum=tempNode.firstChild;
-				if(blockNum<=0){ //New file will be directory's first child
-					tempNode.firstChild=newBlock;	
-					block_write(tempNode.id,&tempNode);	
-				}else{ //New file will be sibling of pre-existent file
-					char buf[512];
-					block_read(blockNum,buf);
-					inode * ptr=(inode *)buf;
-					while(blockNum>0){
-						block_read(blockNum,buf);
-						ptr=(inode *)buf;
-						blockNum=ptr->sibling;
-					}
-					ptr->sibling=newBlock;
-					block_write(ptr->id,ptr);
-				}
-				block_write(newBlock,&newFile);	
-				bitmap[newBlock]=1;
-			}else{
-				retstat=-ENOMEM;
-			}	
-		}else{
-			retstat=-ENOENT;
-		}
-
-	}
-	return retstat;
+	retstat=insertInode(path, S_IFREG);
 }
 
 /** Remove a file */
@@ -608,7 +621,7 @@ int sfs_mkdir(const char *path, mode_t mode)
 		char * ptr=temp;
 		log_msg("Start %s\n",ptr);
 		while(ptr!=NULL){//Genereate a path string for new directory's directory
-			char * tempPtr=strchr(ptr,"/");
+			char * tempPtr=strchr(ptr,'/');
 			if(tempPtr==NULL){
 				break;
 			}
@@ -616,13 +629,15 @@ int sfs_mkdir(const char *path, mode_t mode)
 			ptr=tempPtr;
 			log_msg("Part %s\n",ptr);
 		}
-		ptr[0]='\0'; //clips full path to be just path for directory
+		if(ptr!=temp){
+			*(ptr-1)='\0';//clips full path to be just path for directory
+		}
 		res=getInode(temp,&tempNode);
 
 		if(res==0){ //Director exists->can safely place file in it
 			int newBlock=findFreeBlock();
 			if(newBlock!=-1){
-				inode newFile=createInode(ptr+1,S_IFDIR,0,newBlock);	
+				inode newFile=createInode(ptr,S_IFDIR,0,newBlock);	
 				int blockNum=tempNode.firstChild;
 				if(blockNum<=0){ //New file will be directory's first child
 					tempNode.firstChild=newBlock;	
@@ -660,6 +675,9 @@ int sfs_rmdir(const char *path)
 	int retstat = 0;
 	log_msg("sfs_rmdir(path=\"%s\")\n",
 			path);
+	
+	inode tempNode;
+	retstat = deleteInode(path, &tempNode);
 
 
 	return retstat;
