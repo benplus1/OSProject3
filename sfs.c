@@ -39,6 +39,7 @@ char * FILE_PATH="/.freespace/hkc33/testfsfile";
 char bitmap[32768];
 
 char headBuf[512];
+super * sup;
 inode * head;
 
 void writeBitmap(){
@@ -147,7 +148,7 @@ int insertDataBlock(int blockIndex, inode * curr){
 		block_read(curr->blockPtrIndex,indirent);
 		int indirentIndex=curr->blockCount-INODE_BLOCK_COUNT;
 		indirent[indirentIndex]=blockIndex;
-		block_write(curr->blockPtr,indirent);	
+		block_write(curr->blockPtrIndex,indirent);	
 		curr->blockCount++;
 	}else{
 		log_msg("File has too many blocks %s",curr->path);
@@ -481,8 +482,8 @@ void *sfs_init(struct fuse_conn_info *conn)
 	block_read(BM_BLOCK,bitmap);   
 	block_read(SUPER_BLOCK,headBuf);
 
-	super * superBlock=(super *)headBuf;
-	if(1||superBlock->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
+	sup=(super *)headBuf;
+	if(sup->magicNumber!=MAGIC_NUMBER){ //Have to reformat 
 		log_msg("Have to reformat\n");
 		//Update head (super block)
 		head=malloc(sizeof(inode));
@@ -508,23 +509,21 @@ void *sfs_init(struct fuse_conn_info *conn)
 		for(i=BM_BLOCK;i<BM_BLOCK_COUNT+BM_BLOCK;i++){
 			bitmap[i]=1;
 		}
-		superBlock->magicNumber=MAGIC_NUMBER;
-		superBlock->headNum=HEAD_BLOCK;
-		block_write(SUPER_BLOCK,(char *) superBlock);	
-		block_write(superBlock->headNum,(char *)head);
+		sup->magicNumber=MAGIC_NUMBER;
+		sup->headNum=HEAD_BLOCK;
+		block_write(SUPER_BLOCK,(char *) sup);	
+		block_write(sup->headNum,(char *)head);
 		writeBitmap();
 		char bu[512];
-		block_read(superBlock->headNum,bu);
+		block_read(sup->headNum,bu);
 
 		inode * yo=(inode *) bu;
 		log_msg("Retrieved value %d\n",yo->id );
-		log_msg("Wrote Head Block at: %d\n",superBlock->headNum);
+		log_msg("Wrote Head Block at: %d\n",sup->headNum);
 	}else{
-		block_read(superBlock->headNum,headBuf); //Can safely grab head block	
+		block_read(sup->headNum,headBuf); //Can safely grab head block	
 		head=(inode *) headBuf;
-
-		block_read(BM_BLOCK,bitmap);
-
+		readBitmap();
 	}		
 	log_msg("Starting Num Used Blocks: %d\n", getUsedBlockCount());
 	log_conn(conn);
@@ -544,7 +543,9 @@ void *sfs_init(struct fuse_conn_info *conn)
 void sfs_destroy(void *userdata)
 {
 	log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
-	block_write(BM_BLOCK,bitmap);
+	writeBitmap();
+	block_write(SUPER_BLOCK,sup);
+	block_write(sup->headNum,(char *)head);
 	disk_close(FILE_PATH);
 }
 
