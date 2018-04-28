@@ -87,7 +87,7 @@ void copyInode(inode * dest, inode * target){
 	dest->id=target->id;
 	dest->totalSize=target->totalSize;
 	dest->blockPtrIndex=target->blockPtrIndex;
-	memcpy(dest->blocks,target->blocks,sizeof(int)*50);
+	memcpy(dest->blocks,target->blocks,sizeof(int)*INODE_BLOCK_COUNT);
 	dest->totalSize=target->totalSize;
 }
 
