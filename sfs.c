@@ -121,6 +121,9 @@ int findFreeBlock(){
 			return i;
 		}
 	}
+	writeBitmap();
+	block_write(SUPER_BLOCK,sup);
+	block_write(sup->headNum,(char *)head);
 	return -1;
 }
 
@@ -130,6 +133,7 @@ int insertDataBlock(int blockIndex, inode * curr){
 		log_msg("Get Normal Block: %s", curr->path);
 		curr->blockCount++;
 		curr->blocks[curr->blockCount-1]=blockIndex;	
+		block_write(curr->id, curr);
 	}else if (curr->blockCount>=INODE_BLOCK_COUNT&&curr->blockCount<INDIRENT_BLOCK_COUNT){
 		log_msg("Get Indirent Block: %s", curr->path);
 		int indirent[INDIRENT_BLOCK_COUNT];
@@ -146,8 +150,10 @@ int insertDataBlock(int blockIndex, inode * curr){
 			curr->blockPtrIndex=newIndex;
 		}
 		block_read(curr->blockPtrIndex,indirent);
+		
 		int indirentIndex=curr->blockCount-INODE_BLOCK_COUNT;
 		indirent[indirentIndex]=blockIndex;
+		log_msg("Insert Indirent Block %d\n", indirentIndex);
 		block_write(curr->blockPtrIndex,indirent);	
 		curr->blockCount++;
 	}else{
