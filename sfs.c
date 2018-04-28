@@ -30,15 +30,34 @@
 #include "log.h"
 #include "sfs.h"
 const int SUPER_BLOCK=0;
-const int BM_BLOCK=1;
+const int HEAD_BLOCK=1;
+const int BM_BLOCK=2;
 const int MAGIC_NUMBER=1234;
-const int HEAD_BLOCK=2;
-int BLOCK_COUNT=128;
-char * FILE_PATH="/.freespace/hemanth/testfsfile";
-int bitmap[128];
+int BLOCK_COUNT=32768;
+int BM_BLOCK_COUNT=(32768)/512;
+char * FILE_PATH="/.freespace/hkc33/testfsfile";
+char bitmap[32768];
+
 char headBuf[512];
 inode * head;
 
+void writeBitmap(){
+	int i;
+	for(i=0;i<BM_BLOCK_COUNT;i++){
+		int offset=i*512;
+		int blockIndex=i+BM_BLOCK;
+		block_write(blockIndex,bitmap+offset);
+	}
+}
+
+void readBitmap(){
+	int i;
+	for(i=0;i<BM_BLOCK_COUNT;i++){
+		int offset=i*512;
+		int blockIndex=i+BM_BLOCK;
+		block_read(blockIndex,bitmap+offset);
+	}
+}
 int getUsedBlockCount(){
 	int count=0;
 	int i=0;
@@ -66,8 +85,8 @@ void copyInode(inode * dest, inode * target){
 	dest->totalSize=target->totalSize;
 	dest->id=target->id;
 	dest->totalSize=target->totalSize;
+	dest->blockPtrIndex=target->blockPtrIndex;
 	memcpy(dest->blocks,target->blocks,sizeof(int)*50);
-	memcpy(dest->blockPtrs,target->blockPtrs,sizeof(int)*10);
 	dest->totalSize=target->totalSize;
 }
 
@@ -88,11 +107,12 @@ inode createInode(char * path, mode_t type, off_t offset, ino_t id){
 	newInode.blockCount=0;
 	newInode.offset=offset;
 	newInode.id=id;
+	newInode.blockPtrIndex=-1;
 	return newInode;
 }
 int findFreeBlock(){
 	int i;
-	for(i=0;i<128;i++){
+	for(i=0;i<BLOCK_COUNT;i++){
 		if(bitmap[i]==0){
 			bitmap[i]=1;
 			char buff[512];
@@ -223,9 +243,11 @@ int insertInode(char * path, mode_t type){
 				block_write(newBlock,&newFile);	
 				bitmap[newBlock]=1;
 			}else{
+				log_msg("Can't get new block %s\n", path);
 				retstat=-ENOMEM;
 			}	
 		}else{
+			log_msg("Directory don't exit %s\n",path);
 			retstat=-ENOENT;
 		}
 
@@ -235,6 +257,33 @@ int insertInode(char * path, mode_t type){
 	}
 	return retstat;
 
+}
+
+int insertDataBlock(int blockIndex, inode * curr){
+	int res=0;
+	if(curr->blockCount<INODE_BLOCK_COUNT){
+		log_msg("Get Normal Block: %s", curr->path);
+		curr->blockCount++;
+		curr->blocks[curr->blockCount-1]=blockIndex;	
+	}else if (curr->blockCount>=INODE_BLOCK_COUNT&&curr->blockCount<INDIRENT_BLOCK_COUNT){
+		log_msg("Get Indirent Block: %s", curr->path);
+		int indirent[INDIRENT_BLOCK_COUNT];
+		if(curr->blockPtrIndex<=0){
+			int newIndex=findFreeBlock();
+			if(newIndex<=0){
+				log_msg("Can't get indirent block %s", curr->path );
+				return -ENOMEM;
+			}
+			curr->blockPtrIndex=newIndex;
+		}
+		block_read(curr->blockPtrIndex,indirent);
+		int indirentIndex=curr->blockCount-INODE_BLOCK_COUNT;
+		indirent[indirentIndex]=blockIndex;	
+		curr->blockCount++;
+	}else{
+		log_msg("File has too many blocks %s",curr->path);
+	}
+	return res;
 }
 
 /*int deleteInode(char * realPath, inode * buf){
@@ -437,13 +486,16 @@ void *sfs_init(struct fuse_conn_info *conn)
 			bitmap[i]=0;
 		}
 		bitmap[SUPER_BLOCK]=1;
-		bitmap[BM_BLOCK]=1;
 		bitmap[HEAD_BLOCK]=1;
+		
+		for(i=BM_BLOCK;i<BM_BLOCK_COUNT+BM_BLOCK;i++){
+			bitmap[i]=1;
+		}
 		superBlock->magicNumber=MAGIC_NUMBER;
 		superBlock->headNum=HEAD_BLOCK;
 		block_write(SUPER_BLOCK,(char *) superBlock);	
 		block_write(superBlock->headNum,(char *)head);
-		block_write(BM_BLOCK,bitmap);
+		writeBitmap();
 		char bu[512];
 		block_read(superBlock->headNum,bu);
 
@@ -638,7 +690,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 	}	
 
 
-
+	log_msg("Bytes Read: %d\n", curr.totalSize);	
 	return curr.totalSize;
 }
 
@@ -670,13 +722,12 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 			int newBlock=findFreeBlock();
 			log_msg("new block id is %d\n", newBlock);
 			if(newBlock==-1) {\
-				log_msg("fucked");
+				log_msg("fucked\n");
 				size=incSize;
 				return size;
 			}
 			blockIndex=newBlock;
-			curr.blockCount++;
-			curr.blocks[curr.blockCount-1]=blockIndex;
+			insertDataBlock(blockIndex, &curr);
 		}else{
 			blockIndex=curr.blocks[blockNum];
 		}
@@ -708,6 +759,7 @@ int sfs_mkdir(const char *path, mode_t mode)
 	log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
 			path, mode);
 	retstat=insertInode(path,S_IFDIR);
+	
 	return retstat;
 }
 
