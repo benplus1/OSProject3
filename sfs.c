@@ -123,11 +123,49 @@ int findFreeBlock(){
 	return -1;
 }
 
-int getInodeBlock(inode * curr,int blockNum){
-	if(blockNum<10){
-		return curr->blocks[blockNum];
+int insertDataBlock(int blockIndex, inode * curr){
+	int res=0;
+	if(curr->blockCount<INODE_BLOCK_COUNT){
+		log_msg("Get Normal Block: %s", curr->path);
+		curr->blockCount++;
+		curr->blocks[curr->blockCount-1]=blockIndex;	
+	}else if (curr->blockCount>=INODE_BLOCK_COUNT&&curr->blockCount<INDIRENT_BLOCK_COUNT){
+		log_msg("Get Indirent Block: %s", curr->path);
+		int indirent[INDIRENT_BLOCK_COUNT];
+		if(curr->blockPtrIndex<=0){
+			int newIndex=findFreeBlock();
+			if(newIndex<=0){
+				log_msg("Can't get indirent block %s", curr->path );
+				return -ENOMEM;
+			}
+			int i=0;
+			for (i=0;i<INDIRENT_BLOCK_COUNT;i++){
+				indirent[i]=0;
+			}
+			curr->blockPtrIndex=newIndex;
+		}
+		block_read(curr->blockPtrIndex,indirent);
+		int indirentIndex=curr->blockCount-INODE_BLOCK_COUNT;
+		indirent[indirentIndex]=blockIndex;
+		block_write(curr->blockPtr,indirent);	
+		curr->blockCount++;
 	}else{
-		return curr->blocks[0]; //NEED TO FIX FOR INDIRENT
+		log_msg("File has too many blocks %s",curr->path);
+	}
+	return res;
+}
+int getDataBlock(inode * curr,int blockNum){
+	if(blockNum<INODE_BLOCK_COUNT){
+		return curr->blocks[blockNum];
+	}else if(blockNum>=INODE_BLOCK_COUNT&&blockNum<INDIRENT_BLOCK_COUNT){
+		int indirent[INDIRENT_BLOCK_COUNT];
+		block_read(curr->blockPtrIndex,indirent);
+		int indirentIndex=blockNum-INODE_BLOCK_COUNT;
+		log_msg("Get Indirent Block: %s at %d\n", curr->path, indirentIndex);
+		return indirent[indirentIndex];	
+	}else{
+
+		log_msg("File has too many blocks %s",curr->path);
 	}
 }
 
@@ -135,7 +173,7 @@ void freeBlocks(inode * curr){
 	int blockCount=curr->blockCount;
 	int i;
 	for (i=0;i<blockCount;i++){
-		int blockIndex=getInodeBlock(curr,i);		
+		int blockIndex=getDataBlock(curr,i);		
 		freeBlock(blockIndex);
 	}
 }
@@ -259,32 +297,6 @@ int insertInode(char * path, mode_t type){
 
 }
 
-int insertDataBlock(int blockIndex, inode * curr){
-	int res=0;
-	if(curr->blockCount<INODE_BLOCK_COUNT){
-		log_msg("Get Normal Block: %s", curr->path);
-		curr->blockCount++;
-		curr->blocks[curr->blockCount-1]=blockIndex;	
-	}else if (curr->blockCount>=INODE_BLOCK_COUNT&&curr->blockCount<INDIRENT_BLOCK_COUNT){
-		log_msg("Get Indirent Block: %s", curr->path);
-		int indirent[INDIRENT_BLOCK_COUNT];
-		if(curr->blockPtrIndex<=0){
-			int newIndex=findFreeBlock();
-			if(newIndex<=0){
-				log_msg("Can't get indirent block %s", curr->path );
-				return -ENOMEM;
-			}
-			curr->blockPtrIndex=newIndex;
-		}
-		block_read(curr->blockPtrIndex,indirent);
-		int indirentIndex=curr->blockCount-INODE_BLOCK_COUNT;
-		indirent[indirentIndex]=blockIndex;	
-		curr->blockCount++;
-	}else{
-		log_msg("File has too many blocks %s",curr->path);
-	}
-	return res;
-}
 
 /*int deleteInode(char * realPath, inode * buf){
 	char path[512];
@@ -438,6 +450,11 @@ inode testInode(int blockNum){
 	return *curr;	
 } 
 
+int testIndirent(int blockIndex, int indirentBlockNum){
+	int indirent[INDIRENT_BLOCK_COUNT];
+	block_read(blockIndex,indirent);
+	return indirent[indirentBlockNum];
+}
 
 ///////////////////////////////////////////////////////////
 //
@@ -674,7 +691,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 	int writeSize=512-blockOffset;
 	int incSize=0;
 	while(incSize<size){
-		blockIndex=curr.blocks[blockNum];
+		blockIndex=getDataBlock(&curr,blockNum);
 		char myBuf[512];
 		block_read(blockIndex,myBuf);
 		memcpy(buf+incSize,myBuf+blockOffset,writeSize);
