@@ -3,8 +3,8 @@
 #define _SFS_H_
 
 #define INDIRENT_BLOCK_COUNT 128
-#define INODE_BLOCK_COUNT 50
-
+#define INODE_BLOCK_COUNT 80
+#define INDIRENT_DBL_BLOCK_COUNT 16384
 typedef struct inode{
 	ino_t id;
 	int firstChild;
@@ -21,6 +21,7 @@ typedef struct inode{
 	int totalSize;
 	int blocks[INODE_BLOCK_COUNT];
 	int blockPtrIndex;
+	int blockDoublePtrIndex;
 	char path[100];
 } inode;
 

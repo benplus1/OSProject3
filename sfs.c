@@ -87,6 +87,7 @@ void copyInode(inode * dest, inode * target){
 	dest->id=target->id;
 	dest->totalSize=target->totalSize;
 	dest->blockPtrIndex=target->blockPtrIndex;
+	dest->blockDoublePtrIndex=target->blockDoublePtrIndex;
 	memcpy(dest->blocks,target->blocks,sizeof(int)*INODE_BLOCK_COUNT);
 	dest->totalSize=target->totalSize;
 }
@@ -109,6 +110,7 @@ inode createInode(char * path, mode_t type, off_t offset, ino_t id){
 	newInode.offset=offset;
 	newInode.id=id;
 	newInode.blockPtrIndex=-1;
+	newInode.blockDoublePtrIndex=-1;
 	return newInode;
 }
 int findFreeBlock(){
@@ -117,13 +119,14 @@ int findFreeBlock(){
 		if(bitmap[i]==0){
 			bitmap[i]=1;
 			char buff[512];
+			memset(buff,0,512);
 			block_write(i,buff);
 			return i;
 		}
 	}
-	writeBitmap();
+	/*writeBitmap();
 	block_write(SUPER_BLOCK,sup);
-	block_write(sup->headNum,(char *)head);
+	block_write(sup->headNum,(char *)head);*/
 	return -1;
 }
 
@@ -134,11 +137,12 @@ int insertDataBlock(int blockIndex, inode * curr){
 		curr->blockCount++;
 		curr->blocks[curr->blockCount-1]=blockIndex;	
 		block_write(curr->id, curr);
-	}else if (curr->blockCount>=INODE_BLOCK_COUNT&&curr->blockCount<INDIRENT_BLOCK_COUNT){
+	}else if (curr->blockCount>=INODE_BLOCK_COUNT&&curr->blockCount<INDIRENT_BLOCK_COUNT+INODE_BLOCK_COUNT){
 		log_msg("Get Indirent Block: %s", curr->path);
 		int indirent[INDIRENT_BLOCK_COUNT];
 		if(curr->blockPtrIndex<=0){
 			int newIndex=findFreeBlock();
+			log_msg("Init single indirent\n");
 			if(newIndex<=0){
 				log_msg("Can't get indirent block %s", curr->path );
 				return -ENOMEM;
@@ -156,23 +160,77 @@ int insertDataBlock(int blockIndex, inode * curr){
 		log_msg("Insert Indirent Block %d\n", indirentIndex);
 		block_write(curr->blockPtrIndex,indirent);	
 		curr->blockCount++;
+	}else if (curr->blockCount>=(INDIRENT_BLOCK_COUNT+INODE_BLOCK_COUNT)&&curr->blockCount<INDIRENT_DBL_BLOCK_COUNT+INDIRENT_BLOCK_COUNT+INODE_BLOCK_COUNT){
+		log_msg("Got Double Indirent Block");
+		
+		if(curr->blockDoublePtrIndex<=0){
+			log_msg("Init indirent\n");
+			int newIndex=findFreeBlock();
+			if(newIndex<=0){
+				log_msg("No blocks left\n");
+				return -ENOMEM;
+			}
+			curr->blockDoublePtrIndex=newIndex;
+		}
+		int indirent[INDIRENT_BLOCK_COUNT];
+		log_msg("Reading from double ptr index %d\n", curr->blockDoublePtrIndex);
+		block_read(curr->blockDoublePtrIndex,indirent);
+		
+		int doubleOffset=(curr->blockCount-INODE_BLOCK_COUNT-INDIRENT_BLOCK_COUNT);
+		int indirentIndex=doubleOffset/INDIRENT_BLOCK_COUNT;
+		int doubleIndex=doubleOffset%INDIRENT_BLOCK_COUNT;
+		
+		if(indirent[indirentIndex]<=0){
+			int newIndex=findFreeBlock();
+			if(newIndex<=0){
+				log_msg("Double no blocks left\n");
+				return -ENOMEM;
+			}
+			indirent[indirentIndex]=newIndex;	
+		}
+		log_msg("Double Indirent Offset: %d IndirentIndex: %d DoubleIndex: %d\n", doubleOffset, indirentIndex, doubleIndex);	
+		int doubleInd[INDIRENT_BLOCK_COUNT];
+		block_read(indirent[indirentIndex],doubleInd);
+		doubleInd[doubleIndex]=blockIndex;
+		
+		curr->blockCount++;
+		block_write(curr->id,curr);	
+		block_write(curr->blockDoublePtrIndex, indirent);
+		block_write(indirent[indirentIndex],doubleInd);
 	}else{
-		log_msg("File has too many blocks %s",curr->path);
+		log_msg("File asking for too much\n");
 	}
 	return res;
 }
 int getDataBlock(inode * curr,int blockNum){
 	if(blockNum<INODE_BLOCK_COUNT){
 		return curr->blocks[blockNum];
-	}else if(blockNum>=INODE_BLOCK_COUNT&&blockNum<INDIRENT_BLOCK_COUNT){
+	}else if(blockNum>=INODE_BLOCK_COUNT&&blockNum<INDIRENT_BLOCK_COUNT+INODE_BLOCK_COUNT){
 		int indirent[INDIRENT_BLOCK_COUNT];
 		block_read(curr->blockPtrIndex,indirent);
 		int indirentIndex=blockNum-INODE_BLOCK_COUNT;
 		log_msg("Get Indirent Block: %s at %d\n", curr->path, indirentIndex);
+		log_msg("Index returned is %d\n", indirent[indirentIndex]);
 		return indirent[indirentIndex];	
+	}else if (blockNum>=INDIRENT_BLOCK_COUNT+INODE_BLOCK_COUNT&&blockNum<INDIRENT_DBL_BLOCK_COUNT+INDIRENT_BLOCK_COUNT+INODE_BLOCK_COUNT){
+		log_msg("Got Double Indirent Block");
+		
+		log_msg("Reading from double ptr index %d\n", curr->blockDoublePtrIndex);
+		int indirent[INDIRENT_BLOCK_COUNT];
+		block_read(curr->blockDoublePtrIndex,indirent);
+		
+		int doubleOffset=(blockNum-INODE_BLOCK_COUNT-INDIRENT_BLOCK_COUNT);
+		int indirentIndex=doubleOffset/INDIRENT_BLOCK_COUNT;
+		int doubleIndex=doubleOffset%INDIRENT_BLOCK_COUNT;
+		
+		log_msg("Double Indirent Offset: %d IndirentIndex: %d DoubleIndex: %d\n", doubleOffset, indirentIndex, doubleIndex);	
+		int doubleInd[INDIRENT_BLOCK_COUNT];
+		block_read(indirent[indirentIndex],doubleInd);
+		log_msg("Index returned is %d\n", doubleInd[doubleIndex]);
+		return doubleInd[doubleIndex];	
 	}else{
-
-		log_msg("File has too many blocks %s",curr->path);
+		log_msg("File asking for too much\n");
+		return -1;
 	}
 }
 
@@ -463,6 +521,14 @@ int testIndirent(int blockIndex, int indirentBlockNum){
 	return indirent[indirentBlockNum];
 }
 
+int testDoubleIndirent(int blockIndex, int indirentBlockNum, int doubleIndex){
+	int indirent[INDIRENT_BLOCK_COUNT];
+	block_read(blockIndex,indirent);
+	int dbl[INDIRENT_BLOCK_COUNT];
+	block_read(indirent[indirentBlockNum], dbl);
+
+	return dbl[doubleIndex];
+}
 ///////////////////////////////////////////////////////////
 //
 // Prototypes for all these functions, and the C-style comments,
@@ -697,7 +763,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 	int blockIndex=-1;
 	int writeSize=512-blockOffset;
 	int incSize=0;
-	while(incSize<size){
+	while(incSize<size&&incSize<curr.totalSize){
 		blockIndex=getDataBlock(&curr,blockNum);
 		char myBuf[512];
 		block_read(blockIndex,myBuf);
@@ -712,10 +778,14 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 		}
 		blockOffset-=blockOffset;
 	}	
-
-
-	log_msg("Bytes Read: %d\n", curr.totalSize);	
-	return curr.totalSize;
+	int bytesRead=0;
+	if(size<curr.totalSize){
+		bytesRead=size;
+	}else{
+		bytesRead=curr.totalSize;
+	}
+	log_msg("Bytes Read: %d\n", bytesRead);	
+	return bytesRead;
 }
 
 /** Write data to an open file
@@ -751,7 +821,12 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 				return size;
 			}
 			blockIndex=newBlock;
-			insertDataBlock(blockIndex, &curr);
+			int res=insertDataBlock(blockIndex, &curr);
+			if(res!=0){
+				log_msg("Gotta cut writing\n");
+				size=incSize;
+				return size;
+			}
 		}else{
 			blockIndex=curr.blocks[blockNum];
 		}
