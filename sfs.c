@@ -22,6 +22,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <time.h>
 
 #ifdef HAVE_SYS_XATTR_H
 #include <sys/xattr.h>
@@ -35,7 +36,7 @@ const int BM_BLOCK=2;
 const int MAGIC_NUMBER=1234;
 int BLOCK_COUNT=32768;
 int BM_BLOCK_COUNT=(32768)/512;
-char * FILE_PATH="/.freespace/hkc33/testfsfile";
+char * FILE_PATH="/.freespace/bty10/testfsfile";
 char bitmap[32768];
 
 char headBuf[512];
@@ -81,7 +82,8 @@ void copyInode(inode * dest, inode * target){
 	dest->blockCount=target->blockCount;
 	dest->lastAccess=target->lastAccess;
 	dest->lastMod=target->lastMod;
-	dest->lastStatus=target->lastStatus;
+	//dest->lastStatus=target->lastStatus;
+	time(&(dest->lastStatus));
 	dest->type=target->type;
 	dest->totalSize=target->totalSize;
 	dest->id=target->id;
@@ -103,9 +105,12 @@ inode createInode(char * path, mode_t type, off_t offset, ino_t id){
 	newInode.userId=getuid();
 	newInode.groupId=getgid();
 	newInode.blockSize=512;
-	newInode.lastAccess=time(NULL);
-	newInode.lastMod=time(NULL);
-	newInode.lastStatus=time(NULL);
+	//newInode.lastAccess=time(NULL);
+	//newInode.lastMod=time(NULL);
+	//newInode.lastStatus=time(NULL);
+	time(&(newInode.lastAccess));
+	time(&(newInode.lastMod));
+	time(&(newInode.lastStatus));
 	newInode.blockCount=0;
 	newInode.offset=offset;
 	newInode.id=id;
@@ -363,91 +368,6 @@ int insertInode(char * path, mode_t type){
 }
 
 
-/*int deleteInode(char * realPath, inode * buf){
-	char path[512];
-	strcpy(path,realPath);
-	char buff[512];
-	block_read(HEAD_BLOCK,buff);
-	inode * ptr=buff;
-
-	char parentBuff[512];
-	block_read(HEAD_BLOCK, parentBuff);
-	inode * parentPtr = parentBuff;
-	int lastParentNum = HEAD_BLOCK;
-
-	char * token=strtok(path,"/");
-	int found=1;
-	while (ptr != NULL && token) { //check first set of children
-		printf("token %s\n", token);
-		int ptrNum = ptr->firstChild;
-		inode * childPtr;
-		found = 0;
-		char lastChildBuff[512];
-		inode * lastChildPtr;
-		inode * lastPtrNum;
-		if (ptrNum > 0) {//check first first child
-			block_read(ptrNum, buff);
-			childPtr = (inode *) buff;
-			if (strcmp(childPtr->path, token)==0) {
-				if (childPtr->sibling <= 0) {//no other siblings
-					parentPtr->firstChild = -1; //unlink
-					block_write(lastParentNum,parentBuff); //write change
-					bitmap[ptrNum] = 0;
-					return 0;
-				}
-				else {//one other sibling
-					parentPtr->firstChild = childPtr->sibling;
-					block_write(lastParentNum, parentBuff);
-					bitmap[ptrNum] = 0;	
-					return 0;
-				}
-			}
-			block_read(ptrNum, lastChildBuff);
-			lastChildPtr = (inode *) lastChildBuff;
-			lastPtrNum = ptrNum;
-
-			ptrNum=childPtr->sibling;
-		}
-		while (ptrNum > 0) {//now check the siblings of first first child
-			block_read(ptrNum, buff);
-			childPtr=(inode *) buff;
-			if (strcmp(childPtr->path, token)==0) {
-				if (childPtr->sibling < 0) {//last sibling
-					lastChildPtr->sibling = -1;
-					block_write(lastPtrNum, lastChildBuff);
-					bitmap[ptrNum] = 0;
-					return 0;
-				}
-				else {//skip sibling
-					lastChildPtr->sibling = childPtr->sibling;
-					block_write(lastPtrNum, lastChildBuff);
-					bitmap[ptrNum] = 0;
-					return 0;
-				}
-			}
-			block_read(ptrNum, lastChildBuff);
-			lastChildPtr = (inode *) lastChildBuff;
-			lastPtrNum = ptrNum;
-
-			ptrNum=childPtr->sibling;
-		}
-		if (ptrNum <= 0) {
-			log_msg("Failed traversing\n");
-			break;
-		}
-
-		block_read(ptrNum, parentBuff);
-		parentPtr=(inode *) parentBuff;
-		lastParentNum = ptrNum;
-
-		ptr = childPtr;
-		token = strtok(NULL, "/");
-	}
-
-	return -ENOENT;		
-}*/
-
-
 int deleteInode(char * path){
 	int res=0;
 	inode curr;
@@ -564,9 +484,12 @@ void *sfs_init(struct fuse_conn_info *conn)
 		head->sibling=-1;
 		head->userId=getuid();
 		head->groupId=getgid();
-		head->lastAccess=time(NULL);
-		head->lastMod=time(NULL);
-		head->lastStatus=time(NULL);
+		//head->lastAccess=time(NULL);
+		//head->lastMod=time(NULL);
+		//head->lastStatus=time(NULL);
+		time(&(head->lastAccess));
+		time(&(head->lastMod));
+		time(&(head->lastStatus));
 		head->type=S_IFDIR;
 		head->id=HEAD_BLOCK;
 
@@ -710,7 +633,13 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
 	int retstat = 0;
 	log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
 			path, fi);
-
+	
+	inode file;
+	int res = getInode(path, &file);
+	if (res != 0) {
+		log_msg("file not found\n");
+		retstat=-ENOENT;
+	}
 
 	return retstat;
 }
@@ -757,6 +686,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 			path, buf, size, offset, fi);
 	inode curr;
 	getInode(path,&curr);
+	time(&(curr.lastAccess));
 	int blockNum=(int)offset/512;
 	int blockOffset=offset%512;
 
@@ -804,6 +734,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
 			path, buf, size, offset, fi);
 	inode curr;
 	getInode(path,&curr);
+	time(&(curr.lastMod));
 	int blockNum=(int)offset/512;
 	int blockOffset=offset%512;
 
@@ -892,6 +823,12 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
 	log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
 			path, fi);
 
+	inode file;
+	int res = getInode(path, &file);
+	if (res != 0) {
+		log_msg("file not found\n");
+		retstat=-ENOENT;
+	}
 
 	return retstat;
 }
@@ -1011,3 +948,90 @@ int main(int argc, char *argv[])
 
 	return fuse_stat;
 }
+
+
+
+/*int deleteInode(char * realPath, inode * buf){
+	char path[512];
+	strcpy(path,realPath);
+	char buff[512];
+	block_read(HEAD_BLOCK,buff);
+	inode * ptr=buff;
+
+	char parentBuff[512];
+	block_read(HEAD_BLOCK, parentBuff);
+	inode * parentPtr = parentBuff;
+	int lastParentNum = HEAD_BLOCK;
+
+	char * token=strtok(path,"/");
+	int found=1;
+	while (ptr != NULL && token) { //check first set of children
+		printf("token %s\n", token);
+		int ptrNum = ptr->firstChild;
+		inode * childPtr;
+		found = 0;
+		char lastChildBuff[512];
+		inode * lastChildPtr;
+		inode * lastPtrNum;
+		if (ptrNum > 0) {//check first first child
+			block_read(ptrNum, buff);
+			childPtr = (inode *) buff;
+			if (strcmp(childPtr->path, token)==0) {
+				if (childPtr->sibling <= 0) {//no other siblings
+					parentPtr->firstChild = -1; //unlink
+					block_write(lastParentNum,parentBuff); //write change
+					bitmap[ptrNum] = 0;
+					return 0;
+				}
+				else {//one other sibling
+					parentPtr->firstChild = childPtr->sibling;
+					block_write(lastParentNum, parentBuff);
+					bitmap[ptrNum] = 0;	
+					return 0;
+				}
+			}
+			block_read(ptrNum, lastChildBuff);
+			lastChildPtr = (inode *) lastChildBuff;
+			lastPtrNum = ptrNum;
+
+			ptrNum=childPtr->sibling;
+		}
+		while (ptrNum > 0) {//now check the siblings of first first child
+			block_read(ptrNum, buff);
+			childPtr=(inode *) buff;
+			if (strcmp(childPtr->path, token)==0) {
+				if (childPtr->sibling < 0) {//last sibling
+					lastChildPtr->sibling = -1;
+					block_write(lastPtrNum, lastChildBuff);
+					bitmap[ptrNum] = 0;
+					return 0;
+				}
+				else {//skip sibling
+					lastChildPtr->sibling = childPtr->sibling;
+					block_write(lastPtrNum, lastChildBuff);
+					bitmap[ptrNum] = 0;
+					return 0;
+				}
+			}
+			block_read(ptrNum, lastChildBuff);
+			lastChildPtr = (inode *) lastChildBuff;
+			lastPtrNum = ptrNum;
+
+			ptrNum=childPtr->sibling;
+		}
+		if (ptrNum <= 0) {
+			log_msg("Failed traversing\n");
+			break;
+		}
+
+		block_read(ptrNum, parentBuff);
+		parentPtr=(inode *) parentBuff;
+		lastParentNum = ptrNum;
+
+		ptr = childPtr;
+		token = strtok(NULL, "/");
+	}
+
+	return -ENOENT;		
+}*/
+
