@@ -1,5 +1,5 @@
 #!/bin/bash
-ROOT="/tmp/hkc33/mountdir"
+ROOT="/tmp/bty10/mountdir"
 
 mkdir $ROOT/firstdir
 

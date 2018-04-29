@@ -18,6 +18,7 @@ typedef struct inode{
 	time_t lastMod;
 	time_t lastStatus;
 	mode_t type;
+	int opened;
 	int totalSize;
 	int blocks[INODE_BLOCK_COUNT];
 	int blockPtrIndex;

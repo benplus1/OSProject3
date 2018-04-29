@@ -36,7 +36,8 @@ const int BM_BLOCK=2;
 const int MAGIC_NUMBER=1234;
 int BLOCK_COUNT=32768;
 int BM_BLOCK_COUNT=(32768)/512;
-char * FILE_PATH="/.freespace/bty10/testfsfile";
+//char * FILE_PATH="/.freespace/bty10/testfsfile";
+char * FILE_PATH;
 char bitmap[32768];
 
 char headBuf[512];
@@ -92,6 +93,7 @@ void copyInode(inode * dest, inode * target){
 	dest->blockDoublePtrIndex=target->blockDoublePtrIndex;
 	memcpy(dest->blocks,target->blocks,sizeof(int)*INODE_BLOCK_COUNT);
 	dest->totalSize=target->totalSize;
+	dest->opened = target->opened;
 }
 
 inode createInode(char * path, mode_t type, off_t offset, ino_t id){
@@ -100,6 +102,7 @@ inode createInode(char * path, mode_t type, off_t offset, ino_t id){
 	int pathEnd=strlen(path);	
 	newInode.path[pathEnd]='\0';
 	newInode.type=type;
+	newInode.opened=0;
 	newInode.firstChild=-1;
 	newInode.sibling=-1;
 	newInode.userId=getuid();
@@ -640,6 +643,15 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
 		log_msg("file not found\n");
 		retstat=-ENOENT;
 	}
+	if (file.opened == 0 && file.type == S_IFREG) {
+		file.opened = 1;
+		block_write(file.id,&file);
+	}
+
+	else if (file.type == S_IFDIR) {
+		log_msg("file is a directory\n");
+		retstat=-ENOENT;
+	}
 
 	return retstat;
 }
@@ -664,7 +676,25 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
 	log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
 			path, fi);
 
+	inode file;
+	int res = getInode(path, &file);
 
+	if (res != 0) {
+		log_msg("file not found\n");
+		retstat=-ENOENT;
+	}
+	if (file.opened == 1 && file.type == S_IFREG) {
+		file.opened = 0;
+		block_write(file.id,&file);
+	}
+	else if (file.opened == 0) {
+		log_msg("file already closed\n");
+		retstat=-ENOENT;
+	}
+	else if (file.type == S_IFDIR) {
+		log_msg("file is a directory\n");
+		retstat=-ENOENT;
+	}
 	return retstat;
 }
 
@@ -823,13 +853,22 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
 	log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
 			path, fi);
 
-	inode file;
-	int res = getInode(path, &file);
+	inode directory;
+	int res = getInode(path, &directory);
 	if (res != 0) {
 		log_msg("file not found\n");
 		retstat=-ENOENT;
 	}
 
+	if (directory.opened == 0 && directory.type == S_IFDIR) {
+		directory.opened = 1;
+		block_write(directory.id,&directory);
+	}
+
+	else if (directory.type == S_IFREG) {
+		log_msg("directory is a file\n");
+		retstat=-ENOENT;
+	}
 	return retstat;
 }
 
@@ -887,7 +926,28 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 int sfs_releasedir(const char *path, struct fuse_file_info *fi)
 {
 	int retstat = 0;
+	log_msg("\nsfs_releasedir(path=\"%s\", fi=0x%08x)\n",
+			path, fi);
 
+	inode directory;
+	int res = getInode(path, &directory);
+	if (res != 0) {
+		log_msg("file not found\n");
+		retstat=-ENOENT;
+	}
+
+	if (directory.opened == 1 && directory.type == S_IFDIR) {
+		directory.opened = 0;
+		block_write(directory.id,&directory);
+	}
+	else if (directory.opened == 0) {
+		log_msg("directory already opened\n");
+		retstat=-ENOENT;
+	}
+	else if (directory.type == S_IFREG) {
+		log_msg("directory is a file\n");
+		retstat=-ENOENT;
+	}
 
 	return retstat;
 }
@@ -937,6 +997,7 @@ int main(int argc, char *argv[])
 	sfs_data->diskfile = argv[argc-2];
 	argv[argc-2] = argv[argc-1];
 	argv[argc-1] = NULL;
+	FILE_PATH  = sfs_data->diskfile;
 	argc--;
 
 	sfs_data->logfile = log_open();
