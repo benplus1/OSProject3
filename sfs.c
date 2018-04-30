@@ -739,10 +739,10 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 		blockOffset-=blockOffset;
 	}	
 	int bytesRead=0;
-	if(size<curr.totalSize){
+	if(offset+size<curr.totalSize){
 		bytesRead=size;
 	}else{
-		bytesRead=curr.totalSize;
+		bytesRead=curr.totalSize-offset;
 	}
 	log_msg("Bytes Read: %d\n", bytesRead);	
 	return bytesRead;
